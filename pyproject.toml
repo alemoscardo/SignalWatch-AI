@@ -8,7 +8,16 @@ version = "0.1.0"
 description = "Synthetic telemetry investigation with a small Python AI agent"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["Flask>=3.1,<4", "python-dotenv>=1,<2", "markdown-it-py>=3,<5"]
+
+[project.scripts]
+signalwatch = "signalwatch_ai.web:main"
+
+[tool.setuptools.package-data]
+signalwatch_ai = ["templates/*.html", "static/*", "documents/*.md"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.black]
+target-version = ["py311"]

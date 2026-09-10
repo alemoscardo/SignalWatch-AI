@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SignalWatch AI · Telemetry</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/" aria-label="SignalWatch home">
+        <img src="{{ url_for('static', filename='logo.png') }}" width="35" height="35" alt="">
+        SignalWatch <span class="muted">AI</span>
+      </a>
+      <span class="badge">SYNTHETIC DATA</span>
+    </header>
+    <main>
+      <div class="heading">
+        <h1>Motor M-01</h1>
+        <span class="date">10 September 2026 · UTC</span>
+      </div>
+      <form action="/" method="get" class="scenario-form">
+        <label for="scenario">Scenario</label>
+        <select name="scenario" id="scenario">
+          {% for key, label in scenarios.items() %}
+          <option value="{{ key }}" {% if key == scenario %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Load</button>
+      </form>
+      <div class="workspace">
+        <section class="panel telemetry">
+          <div class="panel-title"><h2>Telemetry</h2></div>
+          <div class="chart-tabs" role="group" aria-label="Chart sensor">
+            <button class="active" data-sensor="temperature" aria-pressed="true">Temperature · °C</button>
+            <button data-sensor="speed" aria-pressed="false">Speed · rpm</button>
+          </div>
+          <svg id="chart" viewBox="0 0 760 260" role="img" aria-label="Measurement history"></svg>
+          <p class="chart-note">Temperature threshold {{ threshold | int }} °C · Marker: alert start</p>
+          <div class="alert-title"><h3>Alerts</h3></div>
+          <div class="alert-list">
+            {% for alert in alerts %}
+            <button class="alert-row" data-alert="{{ loop.index0 }}">
+              <span class="alert-icon">!</span>
+              <span>
+                <strong>Temperature above threshold</strong>
+                <small>{{ alert.timestamp[11:16] }} UTC · M-01</small>
+              </span>
+              <span class="alert-value">{{ alert.value }} °C <small>+{{ alert.excess }} °C</small></span>
+            </button>
+            {% else %}
+            <p>No threshold exceedances observed.</p>
+            {% endfor %}
+          </div>
+        </section>
+        <section class="panel investigation">
+          <h2>Investigation</h2>
+          <p id="selection" class="muted">Select an alert to investigate.</p>
+          <details class="additional">
+            <summary>Add context</summary>
+            <label for="context">Additional context <span class="muted">· optional</span></label>
+            <textarea id="context" rows="4" placeholder="Review the last two hours and compare temperature with motor speed."></textarea>
+            <p class="input-note">Sent to the model with the alert.</p>
+          </details>
+          <button id="investigate" class="primary" {% if not ai_ready %}disabled{% endif %}>
+            Investigate <span>↗</span>
+          </button>
+          <p id="ai-status" class="muted input-note" role="status">
+            {% if ai_ready %}OpenRouter · free models{% else %}AI not connected · add your key to .env and restart{% endif %}
+          </p>
+          <div id="report" class="report-content"></div>
+          <details id="trace-panel" hidden>
+            <summary>Technical details · evidence and calls</summary>
+            <pre id="trace"></pre>
+          </details>
+        </section>
+      </div>
+      <details class="panel sources">
+        <summary>Reference documents <span class="muted">· {{ documents | map(attribute='document') | unique | list | length }}</span></summary>
+        <form id="search">
+          <label class="sr-only" for="query">Search documents</label>
+          <input id="query" type="search" placeholder="Search, for example: cooling">
+          <button type="submit">Search</button>
+        </form>
+        <p id="search-status" role="status" class="muted"></p>
+        <div id="results" class="document-grid"></div>
+      </details>
+    </main>
+    <script id="demo-data" type="application/json">
+      {{ {'documents': documents, 'scenario': scenario, 'temperature': readings, 'speed': speed, 'alerts': alerts, 'threshold': threshold} | tojson }}
+    </script>
+  </body>
+</html>

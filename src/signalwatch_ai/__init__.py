@@ -1,1 +1,1 @@
-"""SignalWatch AI: initial scaffold for synthetic telemetry investigation."""
+"""Local synthetic telemetry investigation with an OpenRouter agent."""
