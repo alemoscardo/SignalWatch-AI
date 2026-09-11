@@ -35,18 +35,8 @@ header {
 .muted {
   color: var(--muted);
 }
-.badge {
-  font-size: 10px;
-  letter-spacing: 1px;
-  padding: 8px 11px;
-  background: #eef4f1;
-  border: 1px solid #d7e4dd;
-  border-radius: 6px;
-  color: #41685c;
-  font-weight: 650;
-}
 main {
-  max-width: 1450px;
+  max-width: 1240px;
   padding: 36px 5%;
   margin: auto;
 }
@@ -77,14 +67,13 @@ p {
   line-height: 1.6;
 }
 .date {
-  text-align: right;
   font-size: 13px;
   line-height: 1.9;
   white-space: nowrap;
 }
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
   align-items: stretch;
 }
@@ -143,63 +132,18 @@ summary:focus-visible {
 #chart {
   display: block;
   width: 100%;
-  height: auto;
-  min-height: 170px;
+  height: 380px;
+  min-width: 0;
 }
 .chart-note {
   font-size: 10px;
   color: var(--muted);
 }
-.alert-title {
-  display: flex;
-  justify-content: space-between;
-  padding: 21px 0 12px;
-  border-top: 1px solid var(--line);
-  margin-top: 20px;
-  font-size: 11px;
-}
-.alert-row {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  text-align: left;
-  gap: 12px;
-  padding: 14px;
-}
-.alert-row.selected {
-  border-color: #d9aa6b;
-  background: #fffbf5;
-}
-.alert-icon {
-  background: #ffedcf;
-  color: #ad691c;
-  border-radius: 50%;
-  width: 27px;
-  height: 27px;
-  display: grid;
-  place-items: center;
-  font-weight: bold;
-}
-.alert-row strong {
-  font-size: 12px;
-}
-.alert-row small {
-  display: block;
-  margin-top: 5px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.alert-value {
-  margin-left: auto;
-  font-weight: 650;
-  color: #9d601c;
-  white-space: nowrap;
-}
 .investigation > p.muted {
   font-size: 13px;
-  min-height: 40px;
+  margin: 10px 0 16px;
 }
-.investigation label {
+.additional label {
   display: block;
   font-size: 12px;
   margin: 23px 0 10px;
@@ -222,17 +166,21 @@ textarea::placeholder {
   color: var(--muted);
 }
 .primary {
-  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 150px;
   background: var(--teal);
   color: white;
   border: 0;
   font-size: 13px;
   padding: 14px;
   text-align: left;
-  margin: 5px 0 18px;
+  margin: 0;
 }
-.primary span {
-  float: right;
+button.primary:hover:not(:disabled) {
+  background: #0e584f;
 }
 .primary:disabled {
   opacity: 0.5;
@@ -301,9 +249,6 @@ details > small {
   clip: rect(0, 0, 0, 0);
 }
 @media (max-width: 900px) {
-  .workspace {
-    grid-template-columns: 1fr;
-  }
   .document-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -311,50 +256,12 @@ details > small {
     font-size: 28px;
   }
 }
-@media (max-width: 550px) {
-  header {
-    padding: 0 18px;
-  }
-  .brand {
-    font-size: 17px;
-  }
-  header .badge {
-    font-size: 8px;
-    padding: 6px;
-  }
-  main {
-    padding: 25px 16px;
-  }
-  .heading {
-    display: block;
-  }
-  .date {
-    display: block;
-    text-align: left;
-    margin-top: 18px;
-  }
-  .panel {
-    padding: 18px;
-  }
-  .document-grid {
-    grid-template-columns: 1fr;
-  }
-  .panel-title {
-    flex-wrap: wrap;
-  }
-  form {
-    flex-direction: column;
-  }
-}
 
 .additional {
-  margin: 24px 0 18px;
+  margin: 0 0 14px;
 }
 .sources > summary {
   font-size: 14px;
-}
-.investigation .primary {
-  margin-top: 8px;
 }
 .report-content {
   font-size: 14px;
@@ -409,7 +316,8 @@ details > small {
   border: 1px solid #dce5e2;
 }
 #trace-panel {
-  margin-top: 22px;
+  max-width: 900px;
+  margin: 22px auto 0;
 }
 .loading-spinner {
   display: inline-block;
@@ -420,16 +328,6 @@ details > small {
   border-radius: 50%;
   animation: loading-spin 0.8s linear infinite;
   flex-shrink: 0;
-}
-.primary.generating {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  opacity: 1;
-  cursor: wait;
-}
-.primary.generating .loading-spinner {
-  float: none;
 }
 .generation-notice {
   display: flex;
@@ -456,20 +354,7 @@ details > small {
     animation: none;
   }
 }
-.scenario-form {
-  align-items: center;
-  margin: 0 0 24px;
-  font-size: 13px;
-}
-.scenario-form select {
-  padding: 10px;
-  border: 1px solid #dce5e2;
-  border-radius: 7px;
-  background: white;
-  color: inherit;
-  font: inherit;
-  max-width: 100%;
-}
+
 .report-content a[href^="#evidence-"] {
   color: #136e62;
   background: #edf5f1;
@@ -498,4 +383,102 @@ details > small {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: 11px;
+}
+
+.history {
+  margin-top: 24px;
+}
+#history-list {
+  display: grid;
+  gap: 8px;
+}
+#history-list button {
+  text-align: left;
+}
+#chart:focus-visible {
+  outline: 2px solid var(--teal);
+}
+
+.investigation {
+  padding: 8px 0;
+  min-width: 0;
+}
+.investigation-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.investigation-toolbar h2 {
+  margin-right: auto;
+}
+.report-content:not(:empty) {
+  max-width: 900px;
+  margin: 24px auto 0;
+  padding: 28px 36px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.investigation .additional {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 10px 0;
+}
+
+.chart-alerts:focus-within {
+  position: static;
+  width: auto;
+  height: auto;
+  clip: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 550px) {
+  header {
+    padding: 0 18px;
+  }
+  .brand {
+    font-size: 17px;
+  }
+  main {
+    padding: 25px 16px;
+  }
+  .heading {
+    display: block;
+  }
+  .date {
+    display: block;
+    text-align: left;
+    margin-top: 18px;
+  }
+  .panel {
+    padding: 18px;
+  }
+  .document-grid {
+    grid-template-columns: 1fr;
+  }
+  .panel-title {
+    flex-wrap: wrap;
+  }
+  form {
+    flex-direction: column;
+  }
+  #chart {
+    height: 300px;
+  }
+  .investigation-toolbar {
+    gap: 12px;
+  }
+  .investigation-toolbar h2 {
+    width: 100%;
+  }
+  .primary {
+    min-width: 0;
+  }
+  .report-content:not(:empty) {
+    padding: 20px 16px;
+  }
 }

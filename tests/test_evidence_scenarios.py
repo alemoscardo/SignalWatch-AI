@@ -63,9 +63,66 @@ class ScenarioTests(unittest.TestCase):
             client = create_app(Path(folder) / "demo.db").test_client()
             response = client.get("/?scenario=spike")
             self.assertEqual(response.status_code, 200)
-            self.assertIn("Isolated spike", response.text)
-            self.assertEqual(client.get("/?scenario=../../bad").status_code, 400)
+            self.assertTrue("Telemetry history" in response.text)
+            self.assertEqual(
+                client.get(
+                    "/api/measurements?scenario=../../bad&sensor=temperature"
+                ).status_code,
+                400,
+            )
             rows = client.get(
                 "/api/measurements?scenario=missing&sensor=temperature"
             ).json
             self.assertEqual(len(rows), 166)
+
+
+class TimelineTests(unittest.TestCase):
+    def test_continuous_history_preserves_episodes_gaps_and_existing_data(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "timeline.db"
+            seed_demo(path, "timeline")
+            rows = read_measurements(path, "temperature")
+            self.assertEqual(len(rows), 1426)
+            self.assertEqual(rows[0]["timestamp"], "2026-09-10T08:00:00+00:00")
+            self.assertEqual(rows[-1]["timestamp"], "2026-09-11T08:00:00+00:00")
+            self.assertEqual(
+                [row["timestamp"] for row in detect_alerts(rows)],
+                [
+                    "2026-09-10T09:32:00+00:00",
+                    "2026-09-10T13:30:00+00:00",
+                    "2026-09-10T17:32:00+00:00",
+                    "2026-09-10T17:51:00+00:00",
+                    "2026-09-10T21:45:00+00:00",
+                    "2026-09-11T01:32:00+00:00",
+                ],
+            )
+            self.assertEqual(
+                read_measurements(
+                    path, "temperature", "2026-09-10T17:36:00Z", "2026-09-10T17:50:00Z"
+                ),
+                [],
+            )
+            before = path.read_bytes()
+            seed_demo(path, "timeline")
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_model_receives_actual_history_range(self):
+        import json
+        from helpers import reply
+        from signalwatch_ai.agent import investigation_events
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "timeline.db"
+            seed_demo(path, "timeline")
+            seen = []
+
+            def completion(messages):
+                seen.extend(messages)
+                return reply({"content": "No evidence"})
+
+            events = investigation_events(path, {}, "", completion)
+            next(events)
+            next(events)
+            events.close()
+            dataset = json.loads(seen[1]["content"])["dataset"]
+            self.assertEqual(dataset["end"], "2026-09-11T08:00:00+00:00")

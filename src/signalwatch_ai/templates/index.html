@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>SignalWatch AI · Telemetry</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script defer src="{{ url_for('static', filename='plotly-basic-3.5.1.min.js') }}"></script>
     <script defer src="{{ url_for('static', filename='app.js') }}"></script>
   </head>
   <body>
@@ -13,49 +14,33 @@
         <img src="{{ url_for('static', filename='logo.png') }}" width="35" height="35" alt="">
         SignalWatch <span class="muted">AI</span>
       </a>
-      <span class="badge">SYNTHETIC DATA</span>
     </header>
     <main>
       <div class="heading">
-        <h1>Motor M-01</h1>
-        <span class="date">10 September 2026 · UTC</span>
+        <div>
+          <h1>Motor M-01</h1>
+          <span class="date">{{ time_range.start[:10] }} {{ time_range.start[11:16] }} – {{ time_range.end[:10] }} {{ time_range.end[11:16] }} UTC</span>
+        </div>
       </div>
-      <form action="/" method="get" class="scenario-form">
-        <label for="scenario">Scenario</label>
-        <select name="scenario" id="scenario">
-          {% for key, label in scenarios.items() %}
-          <option value="{{ key }}" {% if key == scenario %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-        <button type="submit">Load</button>
-      </form>
       <div class="workspace">
         <section class="panel telemetry">
-          <div class="panel-title"><h2>Telemetry</h2></div>
+          <div class="panel-title"><h2>Telemetry history</h2></div>
           <div class="chart-tabs" role="group" aria-label="Chart sensor">
             <button class="active" data-sensor="temperature" aria-pressed="true">Temperature · °C</button>
             <button data-sensor="speed" aria-pressed="false">Speed · rpm</button>
           </div>
-          <svg id="chart" viewBox="0 0 760 260" role="img" aria-label="Measurement history"></svg>
-          <p class="chart-note">Temperature threshold {{ threshold | int }} °C · Marker: alert start</p>
-          <div class="alert-title"><h3>Alerts</h3></div>
-          <div class="alert-list">
-            {% for alert in alerts %}
-            <button class="alert-row" data-alert="{{ loop.index0 }}">
-              <span class="alert-icon">!</span>
-              <span>
-                <strong>Temperature above threshold</strong>
-                <small>{{ alert.timestamp[11:16] }} UTC · M-01</small>
-              </span>
-              <span class="alert-value">{{ alert.value }} °C <small>+{{ alert.excess }} °C</small></span>
-            </button>
-            {% else %}
-            <p>No threshold exceedances observed.</p>
-            {% endfor %}
-          </div>
+          <div id="chart" tabindex="0" role="group" aria-label="Measurement history. Use Left and Right arrow keys to inspect samples."></div>
+          <p class="chart-note">Temperature threshold {{ threshold | int }} °C · Click an amber marker to select an alert</p>
+          <p id="chart-selection" class="chart-note" role="status"></p>
+          <div id="chart-alerts" class="chart-alerts sr-only" role="group" aria-label="Select a temperature alert"></div>
         </section>
-        <section class="panel investigation">
-          <h2>Investigation</h2>
+        <section class="investigation" hidden>
+
+          <div class="investigation-toolbar">
+            <h2>Temperature alert</h2>
+            <button id="close-investigation" type="button" aria-label="Close alert details">Close</button>
+            <button id="investigate" class="primary" {% if not ai_ready %}disabled{% endif %}>Investigate <span>↗</span></button>
+          </div>
           <p id="selection" class="muted">Select an alert to investigate.</p>
           <details class="additional">
             <summary>Add context</summary>
@@ -63,9 +48,6 @@
             <textarea id="context" rows="4" placeholder="Review the last two hours and compare temperature with motor speed."></textarea>
             <p class="input-note">Sent to the model with the alert.</p>
           </details>
-          <button id="investigate" class="primary" {% if not ai_ready %}disabled{% endif %}>
-            Investigate <span>↗</span>
-          </button>
           <p id="ai-status" class="muted input-note" role="status">
             {% if ai_ready %}OpenRouter · free models{% else %}AI not connected · add your key to .env and restart{% endif %}
           </p>
@@ -76,6 +58,11 @@
           </details>
         </section>
       </div>
+      <details class="panel history">
+        <summary>Previous investigations</summary>
+        <p id="history-status" class="muted input-note" role="status"></p>
+        <div id="history-list"></div>
+      </details>
       <details class="panel sources">
         <summary>Reference documents <span class="muted">· {{ documents | map(attribute='document') | unique | list | length }}</span></summary>
         <form id="search">

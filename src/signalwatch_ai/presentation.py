@@ -19,7 +19,11 @@ def render_report(report: str, trace: list) -> str:
         if reference not in evidence:
             return escape(f"[ref:{reference}]")
         number = cited.setdefault(reference, len(cited) + 1)
-        return f'<a href="#evidence-{number}">[{number}]</a>'
+        row = evidence[reference]
+        attributes = ""
+        if "reference" in row:
+            attributes = f' data-sensor="{escape(row["sensor"])}" data-timestamp="{escape(row["timestamp"])}" data-value="{escape(str(row["value"]))}"'
+        return f'<a href="#evidence-{number}"{attributes}>[{number}]</a>'
 
     parser, tokens = report_markdown(report)
     for token in citation_tokens(tokens):

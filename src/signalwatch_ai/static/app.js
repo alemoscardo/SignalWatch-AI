@@ -1,9 +1,43 @@
 const data = JSON.parse(document.querySelector("#demo-data").textContent);
 let sensor = "temperature";
-let selected = data.alerts.length ? 0 : null;
+let highlighted = null;
+let reportScenario = data.scenario;
+let investigating = false;
+let selected = null;
+const sensors = {
+  temperature: { label: "Temperature", unit: "°C" },
+  speed: { label: "Speed", unit: "rpm" },
+};
+
+function formatUtc(timestamp) {
+  return `${timestamp.slice(0, 16).replace("T", " ")} UTC`;
+}
+
+function describeAlert(alert, label = "M-01") {
+  return `${label} · ${formatUtc(alert.timestamp)} · ${alert.value} °C, above threshold by ${alert.excess} °C.`;
+}
+
+function formatSavedDate(timestamp) {
+  return new Date(timestamp).toLocaleString("en-GB");
+}
+
 const chart = document.querySelector("#chart");
-const alertButtons = document.querySelectorAll("[data-alert]");
-const sensorButtons = document.querySelectorAll("[data-sensor]");
+const investigationPanel = document.querySelector(".investigation");
+const closeInvestigation = document.querySelector("#close-investigation");
+const chartAlerts = document.querySelector("#chart-alerts");
+for (const [index, alert] of data.alerts.entries()) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = describeAlert(alert, "Temperature alert");
+  button.addEventListener("click", () => selectAlert(index));
+  chartAlerts.append(button);
+}
+closeInvestigation.addEventListener("click", () => {
+  if (investigating) return;
+  selectAlert(null);
+  chart.focus();
+});
+const sensorButtons = document.querySelectorAll(".chart-tabs [data-sensor]");
 const selection = document.querySelector("#selection");
 const investigateButton = document.querySelector("#investigate");
 const context = document.querySelector("#context");
@@ -13,7 +47,9 @@ const trace = document.querySelector("#trace");
 const tracePanel = document.querySelector("#trace-panel");
 const ready = !investigateButton.disabled;
 const idleStatus = status.textContent;
-const idleButton = investigateButton.innerHTML;
+const historyList = document.querySelector("#history-list");
+const historyStatus = document.querySelector("#history-status");
+const chartSelection = document.querySelector("#chart-selection");
 const search = document.querySelector("#search");
 const searchButton = search.querySelector("button");
 const query = document.querySelector("#query");
@@ -21,6 +57,7 @@ const searchStatus = document.querySelector("#search-status");
 const results = document.querySelector("#results");
 
 function clearInvestigation() {
+  highlighted = null;
   report.replaceChildren();
   trace.replaceChildren();
   tracePanel.hidden = true;
@@ -30,12 +67,15 @@ function clearInvestigation() {
 
 function setInvestigating(active) {
   investigateButton.disabled = active || !ready || selected === null;
-  investigateButton.classList.toggle("generating", active);
-  investigateButton.innerHTML = active
-    ? '<span class="loading-spinner" aria-hidden="true"></span> Generating…'
-    : idleButton;
+  investigating = active;
+  historyList
+    .querySelectorAll("button")
+    .forEach((button) => (button.disabled = active));
   report.setAttribute("aria-busy", String(active));
-  alertButtons.forEach((button) => (button.disabled = active));
+  closeInvestigation.disabled = active;
+  chartAlerts
+    .querySelectorAll("button")
+    .forEach((button) => (button.disabled = active));
   context.disabled = active;
 }
 
@@ -59,163 +99,248 @@ function renderDocuments(documents, expanded = false) {
   }
 }
 
-const svgNS = "http://www.w3.org/2000/svg";
+let chartRevision = 0;
+const chartConfig = {
+  responsive: true,
+  displaylogo: false,
+  displayModeBar: true,
+  modeBarButtons: [["zoom2d", "pan2d", "resetScale2d"]],
+  scrollZoom: false,
+};
 
-function svgElement(name, attributes, text = "") {
-  const element = document.createElementNS(svgNS, name);
-  for (const [key, value] of Object.entries(attributes))
-    element.setAttribute(key, value);
-  element.textContent = text;
-  chart.append(element);
-  return element;
-}
-
-function drawChart() {
-  chart.replaceChildren();
+function drawChart(reset = false) {
+  if (reset) chartRevision++;
   const rows = data[sensor];
-  if (!rows.length) {
-    svgElement(
-      "text",
-      { x: 70, y: 100, fill: "#637578" },
-      "No measurements available",
-    );
-    return;
-  }
-  const values = rows.map((row) => row.value);
-  const low = Math.floor((Math.min(...values) - 5) / 10) * 10;
-  const high =
-    Math.ceil(
-      (Math.max(
-        ...values,
-        ...(sensor === "temperature" ? [data.threshold] : []),
-      ) +
-        5) /
-        10,
-    ) * 10;
-  const first = Date.parse(rows[0].timestamp);
-  const last = Date.parse(rows.at(-1).timestamp);
-  const x = (timestamp) =>
-    55 + ((Date.parse(timestamp) - first) / Math.max(1, last - first)) * 680;
-  const y = (value) => 215 - ((value - low) / (high - low)) * 185;
-  for (let step = 0; step <= 4; step++) {
-    const value = low + ((high - low) * step) / 4;
-    svgElement("line", {
-      x1: 55,
-      x2: 735,
-      y1: y(value),
-      y2: y(value),
-      stroke: "#e8eeeb",
-    });
-    svgElement(
-      "text",
-      {
-        x: 43,
-        y: y(value) + 4,
-        "text-anchor": "end",
-        fill: "#637578",
-        "font-size": 11,
-      },
-      String(Math.round(value)),
-    );
-  }
-  for (const index of [
-    ...new Set([0, Math.floor(rows.length / 2), rows.length - 1]),
-  ]) {
-    svgElement(
-      "text",
-      {
-        x: x(rows[index].timestamp),
-        y: 244,
-        "text-anchor": "middle",
-        fill: "#637578",
-        "font-size": 11,
-      },
-      rows[index].timestamp.slice(11, 16),
-    );
-  }
-  if (sensor === "temperature") {
-    svgElement("line", {
-      x1: 55,
-      x2: 735,
-      y1: y(data.threshold),
-      y2: y(data.threshold),
-      stroke: "#c68d43",
-      "stroke-dasharray": "5 5",
-    });
-  }
-  // Start a new line across missing samples instead of visually inventing data.
-  const path = rows
-    .map((row, index) => {
-      const gap =
-        index === 0 ||
-        Date.parse(row.timestamp) - Date.parse(rows[index - 1].timestamp) !==
-          60000;
-      return `${gap ? "M" : "L"}${x(row.timestamp)},${y(row.value)}`;
-    })
-    .join(" ");
-  svgElement("path", {
-    d: path,
-    fill: "none",
-    stroke: "#197666",
-    "stroke-width": 2.5,
-    "stroke-linejoin": "round",
+  const { label, unit } = sensors[sensor];
+  const points = [];
+  // Explicit nulls prevent Plotly from joining samples across missing minutes.
+  rows.forEach((row, index) => {
+    if (
+      index &&
+      Date.parse(row.timestamp) - Date.parse(rows[index - 1].timestamp) !==
+        60000
+    )
+      points.push(null);
+    points.push(row);
   });
-  for (const row of rows) {
-    const dot = svgElement("circle", {
-      cx: x(row.timestamp),
-      cy: y(row.value),
-      r: 4,
-      fill: "transparent",
-    });
-    const title = document.createElementNS(svgNS, "title");
-    title.textContent = `${row.timestamp.slice(11, 16)} UTC · ${row.value} ${sensor === "temperature" ? "°C" : "rpm"}`;
-    dot.append(title);
-  }
-  if (selected !== null) {
-    const alert = data.alerts[selected];
+  const timestamp = (row) => row.timestamp.slice(0, 19);
+  const hovertemplate = `%{x|%Y-%m-%d %H:%M} UTC · %{y} ${unit}<extra></extra>`;
+  const traces = [
+    {
+      type: "scatter",
+      mode: "lines",
+      name: "Measurements",
+      x: points.map((row) => (row ? timestamp(row) : null)),
+      y: points.map((row) => row?.value ?? null),
+      customdata: points,
+      connectgaps: false,
+      line: { color: "#197666", width: 2.5 },
+      hovertemplate,
+    },
+  ];
+  const alerts = data.alerts.flatMap((alert, alertIndex) => {
     const row = rows.find((row) => row.timestamp === alert.timestamp);
-    if (row)
-      svgElement("circle", {
-        cx: x(row.timestamp),
-        cy: y(row.value),
-        r: 5,
-        fill: "#c68d43",
-        stroke: "white",
-        "stroke-width": 2,
-      });
-  }
+    return row ? [{ ...row, alertIndex }] : [];
+  });
+  traces.push({
+    type: "scatter",
+    mode: "markers",
+    name: "Temperature alerts",
+    x: alerts.map(timestamp),
+    y: alerts.map((row) => row.value),
+    customdata: alerts,
+    marker: {
+      color: alerts.map((row) =>
+        row.alertIndex === selected ? "#a96518" : "#edc794",
+      ),
+      size: alerts.map((row) => (row.alertIndex === selected ? 14 : 10)),
+      line: { color: "white", width: 2 },
+    },
+    hovertemplate: `Temperature alert · %{x|%Y-%m-%d %H:%M} UTC<br>${label}: %{y} ${unit}<extra>Click to select alert</extra>`,
+  });
+  const point =
+    highlighted?.sensor === sensor
+      ? rows.find(
+          (row) =>
+            row.timestamp === highlighted.timestamp &&
+            row.value === Number(highlighted.value),
+        )
+      : null;
+  traces.push({
+    type: "scatter",
+    mode: "markers",
+    name: "Selected measurement",
+    x: point ? [timestamp(point)] : [],
+    y: point ? [point.value] : [],
+    customdata: point ? [point] : [],
+    marker: {
+      color: "#136e62",
+      size: 16,
+      symbol: "circle-open",
+      line: { width: 3 },
+    },
+    hovertemplate,
+  });
+  chartSelection.textContent = point
+    ? `${label} · ${formatUtc(point.timestamp)} · ${point.value} ${unit}`
+    : highlighted?.sensor === sensor
+      ? "This saved measurement is not present in the current graph. See its source snapshot below."
+      : "Select an amber alert to investigate. Drag to pan; use Zoom for a closer view.";
+  return Plotly.react(
+    chart,
+    traces,
+    {
+      uirevision: `${sensor}-${chartRevision}`,
+      showlegend: false,
+      margin: { l: 48, r: 15, t: 32, b: 40 },
+      font: {
+        family: 'Inter, "Segoe UI", sans-serif',
+        color: "#637578",
+        size: 11,
+      },
+      paper_bgcolor: "white",
+      plot_bgcolor: "white",
+      hovermode: "closest",
+      dragmode: "pan",
+      xaxis: {
+        type: "date",
+        tickformat: "%H:%M<br>%d %b",
+        showgrid: false,
+        zeroline: false,
+        autorange: true,
+      },
+      yaxis: { gridcolor: "#e8eeeb", zeroline: false, autorange: true },
+      shapes:
+        sensor === "temperature"
+          ? [
+              {
+                type: "line",
+                xref: "paper",
+                x0: 0,
+                x1: 1,
+                y0: data.threshold,
+                y1: data.threshold,
+                line: { color: "#c68d43", dash: "dash", width: 1 },
+              },
+            ]
+          : [],
+      annotations: rows.length
+        ? []
+        : [
+            {
+              text: "No measurements available",
+              showarrow: false,
+              xref: "paper",
+              yref: "paper",
+              x: 0.5,
+              y: 0.5,
+            },
+          ],
+    },
+    chartConfig,
+  );
 }
 
-function selectAlert(index) {
-  if (selected !== index) clearInvestigation();
+chart.addEventListener("keydown", (event) => {
+  if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+  const rows = data[sensor];
+  if (!rows.length) return;
+  event.preventDefault();
+  const current =
+    highlighted?.sensor === sensor
+      ? rows.findIndex((row) => row.timestamp === highlighted.timestamp)
+      : -1;
+  const index = Math.max(
+    0,
+    Math.min(rows.length - 1, current + (event.key === "ArrowRight" ? 1 : -1)),
+  );
+  highlighted = rows[index];
+  drawChart();
+});
+
+function selectAlert(index, saved = null) {
+  if (index < 0) index = null;
+  if (selected !== index || saved || index === null) clearInvestigation();
   selected = index;
-  alertButtons.forEach((button) => {
-    const active = Number(button.dataset.alert) === selected;
-    button.classList.toggle("selected", active);
-    button.setAttribute("aria-pressed", String(active));
-  });
-  if (selected !== null) {
-    const alert = data.alerts[selected];
-    selection.textContent = `M-01 · ${alert.timestamp.slice(11, 16)} UTC · ${alert.value} °C, above threshold by ${alert.excess} °C.`;
+  investigationPanel.hidden = selected === null && !saved;
+  investigateButton.disabled = investigating || !ready || selected === null;
+  const alert = saved?.alert || data.alerts[selected];
+  selection.textContent = alert
+    ? describeAlert(alert, saved ? "Saved alert" : "M-01")
+    : "No alert selected. Choose an available alert to investigate.";
+  if (saved) {
+    context.value = saved.context;
+    showReport(saved);
   }
   drawChart();
+  if (!investigationPanel.hidden)
+    investigationPanel.scrollIntoView({ block: "nearest" });
 }
 
-alertButtons.forEach((button) =>
-  button.addEventListener("click", () =>
-    selectAlert(Number(button.dataset.alert)),
-  ),
-);
+function selectSensor(value, reset = false) {
+  sensor = value;
+  sensorButtons.forEach((tab) => {
+    const active = tab.dataset.sensor === sensor;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-pressed", String(active));
+  });
+  drawChart(reset);
+}
 sensorButtons.forEach((button) =>
-  button.addEventListener("click", () => {
-    sensor = button.dataset.sensor;
-    sensorButtons.forEach((tab) => {
-      tab.classList.toggle("active", tab === button);
-      tab.setAttribute("aria-pressed", String(tab === button));
-    });
-    drawChart();
-  }),
+  button.addEventListener("click", () => selectSensor(button.dataset.sensor)),
 );
+
+function showReport(result) {
+  reportScenario = result.scenario || data.scenario;
+  report.innerHTML = result.report_html;
+  status.textContent = `${result.model} · ${result.calls} requests · ${result.tokens} tokens · ${result.seconds} s. Hypotheses require verification.`;
+  if (result.created_at)
+    status.textContent = `Saved ${formatSavedDate(result.created_at)} · ${status.textContent}`;
+  trace.textContent = JSON.stringify(result.trace, null, 2);
+  tracePanel.hidden = false;
+}
+
+async function loadHistory() {
+  try {
+    const response = await fetch("/api/investigations");
+    if (!response.ok) throw new Error();
+    const items = await response.json();
+    historyList.replaceChildren();
+    historyStatus.textContent = items.length
+      ? "Saved on this computer"
+      : "No saved investigations yet.";
+    for (const item of items) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.disabled = investigating;
+      button.textContent = `${formatSavedDate(item.created_at)} · Alert ${formatUtc(item.alert_time)}`;
+      button.addEventListener("click", async () => {
+        if (investigating) return;
+        setInvestigating(true);
+        try {
+          const response = await fetch(`/api/investigations/${item.id}`);
+          if (!response.ok) throw new Error();
+          const saved = await response.json();
+          selectAlert(
+            saved.scenario === data.scenario
+              ? data.alerts.findIndex((alert) => alert.id === saved.alert.id)
+              : -1,
+            saved,
+          );
+          report.scrollIntoView({ block: "start" });
+        } catch {
+          historyStatus.textContent =
+            "Could not open this investigation. Try again.";
+        } finally {
+          setInvestigating(false);
+        }
+      });
+      historyList.append(button);
+    }
+  } catch {
+    historyStatus.textContent = "History unavailable. Try reloading the page.";
+  }
+}
 
 search.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -242,32 +367,80 @@ search.addEventListener("submit", async (event) => {
 renderDocuments(data.documents);
 setInvestigating(false);
 selectAlert(selected);
+chart.on("plotly_click", (event) => {
+  const row = event.points[0]?.customdata;
+  if (!row) return;
+  const alertIndex = data.alerts.findIndex(
+    (alert) => alert.timestamp === row.timestamp,
+  );
+  if (alertIndex !== -1) {
+    if (!investigating) selectAlert(alertIndex);
+    return;
+  }
+  highlighted = row;
+  drawChart();
+});
+loadHistory();
 
 investigateButton.addEventListener("click", async () => {
-  if (selected === null) return;
+  if (selected === null || investigating) return;
   clearInvestigation();
+  drawChart();
   setInvestigating(true);
   report.innerHTML =
-    '<div class="generation-notice" role="status"><span class="loading-spinner" aria-hidden="true"></span><div><strong>Preparing your report</strong><p>Reviewing measurements and documents. Please wait.</p></div></div>';
-  status.textContent =
-    "Investigation in progress… the model is reviewing evidence.";
+    '<div class="generation-notice" role="status"><span class="loading-spinner" aria-hidden="true"></span><div><strong>Investigation in progress</strong><p id="progress-message">Connecting…</p></div></div>';
+  status.textContent = "";
   try {
     const response = await fetch("/api/investigate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/x-ndjson",
+      },
       body: JSON.stringify({
         scenario: data.scenario,
         alert_id: data.alerts[selected].id,
         context: context.value,
       }),
     });
-    const result = await response.json();
-    if (!response.ok)
-      throw new Error(result.error || "Investigation unavailable.");
-    report.innerHTML = result.report_html;
-    status.textContent = `${result.model} · ${result.calls} requests · ${result.tokens} tokens · ${result.seconds} s. Hypotheses require verification.`;
-    trace.textContent = JSON.stringify(result.trace, null, 2);
-    tracePanel.hidden = false;
+    if (!response.ok) {
+      const failure = await response.json();
+      throw new Error(failure.error || "Investigation unavailable.");
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let completed = false;
+    const handleLine = (line) => {
+      if (!line.trim()) return;
+      const event = JSON.parse(line);
+      if (event.type === "progress")
+        document.querySelector("#progress-message").textContent = event.message;
+      if (event.type === "error") throw new Error(event.message);
+      if (event.type === "result") {
+        showReport(event.result);
+        completed = true;
+      }
+    };
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+        lines.forEach(handleLine);
+        if (done) break;
+      }
+      handleLine(buffer);
+      if (!completed)
+        throw new Error(
+          "Connection ended before the investigation completed. Check Previous investigations before retrying.",
+        );
+    } finally {
+      await reader.cancel();
+      reader.releaseLock();
+    }
+    await loadHistory();
   } catch (error) {
     report.textContent = "";
     status.textContent =
@@ -286,6 +459,17 @@ report.addEventListener("click", (event) => {
   if (!source) return;
   event.preventDefault();
   source.open = true;
-  source.scrollIntoView({ block: "center" });
-  source.querySelector("summary").focus({ preventScroll: true });
+  if (link.dataset.sensor && reportScenario === data.scenario) {
+    highlighted = {
+      sensor: link.dataset.sensor,
+      timestamp: link.dataset.timestamp,
+      value: Number(link.dataset.value),
+    };
+    selectSensor(highlighted.sensor, true);
+    chart.scrollIntoView({ block: "center" });
+    chart.focus({ preventScroll: true });
+  } else {
+    source.scrollIntoView({ block: "center" });
+    source.querySelector("summary").focus({ preventScroll: true });
+  }
 });

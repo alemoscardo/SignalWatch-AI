@@ -9,6 +9,7 @@ import sqlite3
 SENSORS = {"temperature": "°C", "speed": "rpm"}
 TEMPERATURE_LIMIT = 80.0
 SCENARIOS = {
+    "timeline": "Continuous history",
     "demo": "Peak with rising motor speed",
     "sustained": "Sustained high temperature",
     "missing": "Missing samples",
@@ -30,18 +31,31 @@ def seed_demo(path: Path, scenario: str = "demo") -> None:
             return
         start = datetime(2026, 9, 10, 8, tzinfo=timezone.utc)
         rows = []
-        for minute in range(181):
-            timestamp = (start + timedelta(minutes=minute)).isoformat()
+        episodes = ["demo", "sustained", "missing", "spike", "steady-speed"]
+        for elapsed in range(1441 if scenario == "timeline" else 181):
+            timestamp = (start + timedelta(minutes=elapsed)).isoformat()
+            minute = elapsed
+            episode = scenario
+            if scenario == "timeline":
+                block, minute = divmod(elapsed, 240)
+                episode = (
+                    episodes[block]
+                    if block < len(episodes) and minute <= 180
+                    else "baseline"
+                )
+                if episode == "baseline":
+                    minute += 240
+
             heat = max(0, 1 - abs(minute - 105) / 30)
             temperature = round(64 + 31 * heat + 1.2 * math.sin(minute / 8), 1)
             speed = round(1200 + 300 * heat + 35 * math.sin(minute / 12))
-            if scenario == "sustained":
+            if episode == "sustained":
                 temperature = 92.0 if minute >= 90 else 64.0
-            elif scenario == "spike":
+            elif episode == "spike":
                 temperature = 95.0 if minute == 105 else 64.0
-            if scenario in ("steady-speed", "spike", "sustained"):
+            if episode in ("steady-speed", "spike", "sustained"):
                 speed = 1200
-            if scenario == "missing" and 96 <= minute <= 110:
+            if episode == "missing" and 96 <= minute <= 110:
                 continue
             rows.extend(
                 (("temperature", timestamp, temperature), ("speed", timestamp, speed))
@@ -108,3 +122,11 @@ def detect_alerts(readings: list[dict]) -> list[dict]:
             )
         above, previous_time = is_above, now
     return alerts
+
+
+def dataset_range(path):
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+        start, end = db.execute(
+            "SELECT MIN(timestamp), MAX(timestamp) FROM measurements"
+        ).fetchone()
+    return {"start": start, "end": end, "timezone": "UTC"}
