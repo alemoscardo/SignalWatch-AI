@@ -33,7 +33,7 @@ The application default was selected on development cases before held-out result
 
 All methods returned zero explicitly forbidden sources in these fixtures. Coverage of all required passages is lower than first-hit success for multi-source questions. Semantic search is not universally better: it misses held-out q36 about constant speed and mechanical torque. The first model load took about 7–8 seconds; later semantic queries were generally around 0.05–0.08 seconds on that machine. This is a tiny synthetic benchmark, and several held-out concepts overlap development concepts, so it is not a strong generalization result.
 
-Raw reports: [development](evaluation-results/evaluation-1.md) and [held-out](evaluation-results/evaluation-3.md). JSON exports alongside them contain source passages, configuration and individual results.
+The checked-in Markdown reports are [development](evaluation-results/evaluation-1.md) and [held-out](evaluation-results/evaluation-3.md). Raw JSON exports contain source passages, configuration and individual results; new exports are written to the ignored `reports/local/` directory and are not versioned here.
 
 ## Actual model run
 
