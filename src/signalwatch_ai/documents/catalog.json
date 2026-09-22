@@ -1,0 +1,122 @@
+[
+  {
+    "file": "advisory.md",
+    "manual": "advisory",
+    "equipment": "M-01",
+    "revision": 1,
+    "valid_from": "2026-09-01T00:00:00Z",
+    "valid_to": null
+  },
+  {
+    "file": "alerts.md",
+    "manual": "alerts",
+    "equipment": "M-01",
+    "revision": 1,
+    "valid_from": "2026-09-01T00:00:00Z",
+    "valid_to": null
+  },
+  {
+    "file": "calibration.md",
+    "manual": "calibration",
+    "equipment": "M-01",
+    "revision": 1,
+    "valid_from": "2026-09-01T00:00:00Z",
+    "valid_to": null
+  },
+  {
+    "file": "cooling-future.md",
+    "manual": "cooling",
+    "equipment": "M-01",
+    "revision": 3,
+    "valid_from": "2026-10-01T00:00:00Z",
+    "valid_to": null
+  },
+  {
+    "file": "cooling-old.md",
+    "manual": "cooling",
+    "equipment": "M-01",
+    "revision": 1,
+    "valid_from": "2026-01-01T00:00:00Z",
+    "valid_to": "2026-09-01T00:00:00Z"
+  },
+  {
+    "file": "cooling.md",
+    "manual": "cooling",
+    "equipment": "M-01",
+    "revision": 2,
+    "valid_from": "2026-09-01T00:00:00Z",
+    "valid_to": "2026-10-01T00:00:00Z"
+  },
+  {
+    "file": "gaps.md",
+    "manual": "gaps",
+    "equipment": "general",
+    "revision": 1,
+    "valid_from": "2026-09-01T00:00:00Z",
+    "valid_to": null
+  },
+  {
+    "file": "hostile-note.md",
+    "manual": "hostile-note",
+    "equipment": "general",
+    "revision": 1,
+    "valid_from": "2026-09-01T00:00:00Z",
+    "valid_to": null
+  },
+  {
+    "file": "inspection.md",
+    "manual": "inspection",
+    "equipment": "general",
+    "revision": 1,
+    "valid_from": "2026-09-01T00:00:00Z",
+    "valid_to": null
+  },
+  {
+    "file": "load.md",
+    "manual": "load",
+    "equipment": "M-01",
+    "revision": 1,
+    "valid_from": "2026-09-01T00:00:00Z",
+    "valid_to": null
+  },
+  {
+    "file": "m02.md",
+    "manual": "m02",
+    "equipment": "M-02",
+    "revision": 1,
+    "valid_from": "2026-09-01T00:00:00Z",
+    "valid_to": null
+  },
+  {
+    "file": "motor.md",
+    "manual": "motor",
+    "equipment": "M-01",
+    "revision": 1,
+    "valid_from": "2026-09-01T00:00:00Z",
+    "valid_to": null
+  },
+  {
+    "file": "recovery.md",
+    "manual": "recovery",
+    "equipment": "M-01",
+    "revision": 1,
+    "valid_from": "2026-09-01T00:00:00Z",
+    "valid_to": null
+  },
+  {
+    "file": "sensors.md",
+    "manual": "sensors",
+    "equipment": "general",
+    "revision": 1,
+    "valid_from": "2026-09-01T00:00:00Z",
+    "valid_to": null
+  },
+  {
+    "file": "spikes.md",
+    "manual": "spikes",
+    "equipment": "M-01",
+    "revision": 1,
+    "valid_from": "2026-09-01T00:00:00Z",
+    "valid_to": null
+  }
+]

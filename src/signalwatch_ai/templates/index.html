@@ -19,9 +19,10 @@
       <div class="heading">
         <div>
           <h1>Motor M-01</h1>
-          <span class="date">{{ time_range.start[:10] }} {{ time_range.start[11:16] }} – {{ time_range.end[:10] }} {{ time_range.end[11:16] }} UTC</span>
+          <span class="date">{% if time_range.start %}{{ time_range.start[:10] }} {{ time_range.start[11:16] }} – {{ time_range.end[:10] }} {{ time_range.end[11:16] }} UTC{% else %}No measurements available{% endif %}</span>
         </div>
       </div>
+      <p class="muted" role="status">{{ knowledge.message }} · {{ knowledge.documents }} documents · Generation {{ knowledge.generation or 'none' }}. Guidance is selected for the equipment and alert date.</p>
       <div class="workspace">
         <section class="panel telemetry">
           <div class="panel-title"><h2>Telemetry history</h2></div>
@@ -39,7 +40,7 @@
           <div class="investigation-toolbar">
             <h2>Temperature alert</h2>
             <button id="close-investigation" type="button" aria-label="Close alert details">Close</button>
-            <button id="investigate" class="primary" {% if not ai_ready %}disabled{% endif %}>Investigate <span>↗</span></button>
+            <button id="investigate" class="primary" {% if not ai_ready or not knowledge.ready %}disabled{% endif %}>Investigate <span>↗</span></button>
           </div>
           <p id="selection" class="muted">Select an alert to investigate.</p>
           <details class="additional">

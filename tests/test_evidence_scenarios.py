@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from helpers import demo_database
 from signalwatch_ai.agent import validate_evidence
 from signalwatch_ai.telemetry import (
     seed_demo,
@@ -44,13 +45,19 @@ class ScenarioTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             profiles = {}
             for scenario in SCENARIOS:
-                path = Path(folder) / f"{scenario}.db"
+                path = demo_database(self)
                 seed_demo(path, scenario)
-                profiles[scenario] = read_measurements(path, "temperature")
+                profiles[scenario] = read_measurements(
+                    path, "temperature", scenario=scenario
+                )
                 self.assertTrue(detect_alerts(profiles[scenario]))
                 if scenario == "steady-speed":
                     self.assertEqual(
-                        {r["value"] for r in read_measurements(path, "speed")}, {1200}
+                        {
+                            r["value"]
+                            for r in read_measurements(path, "speed", scenario=scenario)
+                        },
+                        {1200},
                     )
             self.assertEqual(sum(r["value"] > 80 for r in profiles["spike"]), 1)
             self.assertEqual(sum(r["value"] > 80 for r in profiles["sustained"]), 91)
@@ -60,7 +67,7 @@ class ScenarioTests(unittest.TestCase):
 
     def test_web_scenario_and_invalid_path(self):
         with tempfile.TemporaryDirectory() as folder:
-            client = create_app(Path(folder) / "demo.db").test_client()
+            client = create_app(demo_database(self)).test_client()
             response = client.get("/?scenario=spike")
             self.assertEqual(response.status_code, 200)
             self.assertTrue("Telemetry history" in response.text)
@@ -79,9 +86,9 @@ class ScenarioTests(unittest.TestCase):
 class TimelineTests(unittest.TestCase):
     def test_continuous_history_preserves_episodes_gaps_and_existing_data(self):
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "timeline.db"
+            path = demo_database(self)
             seed_demo(path, "timeline")
-            rows = read_measurements(path, "temperature")
+            rows = read_measurements(path, "temperature", scenario="timeline")
             self.assertEqual(len(rows), 1426)
             self.assertEqual(rows[0]["timestamp"], "2026-09-10T08:00:00+00:00")
             self.assertEqual(rows[-1]["timestamp"], "2026-09-11T08:00:00+00:00")
@@ -98,13 +105,19 @@ class TimelineTests(unittest.TestCase):
             )
             self.assertEqual(
                 read_measurements(
-                    path, "temperature", "2026-09-10T17:36:00Z", "2026-09-10T17:50:00Z"
+                    path,
+                    "temperature",
+                    "2026-09-10T17:36:00Z",
+                    "2026-09-10T17:50:00Z",
+                    scenario="timeline",
                 ),
                 [],
             )
-            before = path.read_bytes()
+            before = read_measurements(path, "temperature", scenario="timeline")
             seed_demo(path, "timeline")
-            self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(
+                read_measurements(path, "temperature", scenario="timeline"), before
+            )
 
     def test_model_receives_actual_history_range(self):
         import json
@@ -112,7 +125,7 @@ class TimelineTests(unittest.TestCase):
         from signalwatch_ai.agent import investigation_events
 
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "timeline.db"
+            path = demo_database(self)
             seed_demo(path, "timeline")
             seen = []
 
@@ -120,9 +133,9 @@ class TimelineTests(unittest.TestCase):
                 seen.extend(messages)
                 return reply({"content": "No evidence"})
 
-            events = investigation_events(path, {}, "", completion)
-            next(events)
-            next(events)
+            events = investigation_events(path, {}, "", completion, scenario="timeline")
+            while not seen:
+                next(events)
             events.close()
             dataset = json.loads(seen[1]["content"])["dataset"]
             self.assertEqual(dataset["end"], "2026-09-11T08:00:00+00:00")

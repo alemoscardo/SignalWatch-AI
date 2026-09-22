@@ -4,7 +4,7 @@ from unittest.mock import patch
 from helpers import demo_database
 import unittest
 
-from signalwatch_ai.evidence import document_sections, search_documents
+from signalwatch_ai.knowledge import document_sections, search_documents
 from signalwatch_ai.telemetry import detect_alerts, read_measurements, seed_demo
 from signalwatch_ai.web import create_app
 
@@ -44,10 +44,10 @@ class StorageAndWebTests(unittest.TestCase):
         self.client = create_app(self.path).test_client()
 
     def test_seed_is_repeatable_and_read_does_not_mutate(self):
-        before = self.path.read_bytes()
+        before = read_measurements(self.path, "temperature")
         rows = read_measurements(self.path, "temperature")
         self.assertEqual(len(rows), 181)
-        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(read_measurements(self.path, "temperature"), before)
         seed_demo(self.path)
         self.assertEqual(read_measurements(self.path, "temperature"), rows)
 
@@ -78,14 +78,15 @@ class StorageAndWebTests(unittest.TestCase):
             )
 
     def test_document_evidence_and_no_results(self):
-        matches = search_documents("cooling")
+        matches = search_documents("cooling", self.path)
         self.assertTrue(matches)
         self.assertTrue(
             all(len(m["version"]) == 64 and m["section"] and m["text"] for m in matches)
         )
-        self.assertEqual(len({s["document"] for s in document_sections()}), 3)
-        self.assertEqual(search_documents("zzzzzz"), [])
-        self.assertEqual(search_documents(""), [])
+        self.assertEqual(len({s["document"] for s in document_sections(self.path)}), 15)
+        self.assertEqual(search_documents("zzzzzz", self.path), [])
+        with self.assertRaises(ValueError):
+            search_documents("", self.path)
         self.assertEqual(self.client.get("/api/documents?q=cooling").json, matches)
 
     def test_page_and_assets_are_available_and_ai_is_explicit(self):

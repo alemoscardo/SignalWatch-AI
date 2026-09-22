@@ -1,4 +1,4 @@
-from helpers import reply
+from helpers import reply, demo_database
 import json
 import unittest
 from unittest.mock import patch
@@ -63,6 +63,8 @@ class RepairTests(unittest.TestCase):
                 )
 
     def test_document_tool_supplies_ready_citation(self):
-        rows = execute_tool(None, "search_documents", '{"query":"temperature"}')
+        rows = execute_tool(
+            demo_database(self), "search_documents", '{"query":"temperature"}'
+        )
         self.assertTrue(rows)
         self.assertEqual(rows[0]["citation"], f"[ref:{rows[0]['id']}]")

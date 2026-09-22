@@ -1,10 +1,8 @@
 """Synthetic measurements and deterministic alert detection. All times are UTC."""
 
-from contextlib import closing
 from datetime import datetime, timedelta, timezone
 import math
-from pathlib import Path
-import sqlite3
+from .database import connect
 
 SENSORS = {"temperature": "°C", "speed": "rpm"}
 TEMPERATURE_LIMIT = 80.0
@@ -18,16 +16,18 @@ SCENARIOS = {
 }
 
 
-def seed_demo(path: Path, scenario: str = "demo") -> None:
+def seed_demo(database=None, scenario: str = "demo") -> None:
     """Create the demo once. Never replace existing measurements."""
     if scenario not in SCENARIOS:
         raise ValueError("Unknown scenario.")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with closing(sqlite3.connect(path)) as db, db:
-        db.execute("""CREATE TABLE IF NOT EXISTS measurements (
-            sensor TEXT NOT NULL, timestamp TEXT NOT NULL, value REAL NOT NULL,
-            PRIMARY KEY (sensor, timestamp))""")
-        if db.execute("SELECT 1 FROM measurements LIMIT 1").fetchone():
+    with connect(database) as db:
+        db.execute(
+            "INSERT INTO datasets(id) VALUES (%s) ON CONFLICT DO NOTHING", (scenario,)
+        )
+        db.execute("SELECT id FROM datasets WHERE id=%s FOR UPDATE", (scenario,))
+        if db.execute(
+            "SELECT 1 FROM measurements WHERE dataset=%s LIMIT 1", (scenario,)
+        ).fetchone():
             return
         start = datetime(2026, 9, 10, 8, tzinfo=timezone.utc)
         rows = []
@@ -60,35 +60,48 @@ def seed_demo(path: Path, scenario: str = "demo") -> None:
             rows.extend(
                 (("temperature", timestamp, temperature), ("speed", timestamp, speed))
             )
-        db.executemany("INSERT INTO measurements VALUES (?, ?, ?)", rows)
+        with db.cursor() as cursor:
+            cursor.executemany(
+                "INSERT INTO measurements(dataset,sensor,timestamp,value) VALUES (%s, %s, %s, %s)",
+                [(scenario, *row) for row in rows],
+            )
 
 
-def utc_timestamp(value: str) -> str:
+def parse_timestamp(value: str) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError("Timestamps must be ISO strings with a timezone.")
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
         raise ValueError("Specify a timezone in timestamps.")
-    return parsed.astimezone(timezone.utc).isoformat()
+    return parsed.astimezone(timezone.utc)
+
+
+def utc_timestamp(value: str) -> str:
+    return parse_timestamp(value).isoformat()
 
 
 def read_measurements(
-    path: Path, sensor: str, start: str | None = None, end: str | None = None
+    database,
+    sensor: str,
+    start: str | None = None,
+    end: str | None = None,
+    scenario: str = "demo",
 ) -> list[dict]:
     if sensor not in SENSORS:
         raise ValueError("Unknown sensor.")
-    start = utc_timestamp(start) if start else "0000"
-    end = utc_timestamp(end) if end else "9999"
-    if start > end:
+    start = utc_timestamp(start) if start else None
+    end = utc_timestamp(end) if end else None
+    if start and end and start > end:
         raise ValueError("Start must precede end.")
-    # Read-only connection: this function cannot change the database.
-    uri = path.resolve().as_uri() + "?mode=ro"
-    with closing(sqlite3.connect(uri, uri=True)) as db:
-        db.row_factory = sqlite3.Row
+    with connect(database, readonly=True) as db:
         return [
-            dict(row)
+            {**row, "timestamp": row["timestamp"].isoformat()}
             for row in db.execute(
                 "SELECT sensor, timestamp, value FROM measurements "
-                "WHERE sensor = ? AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp",
-                (sensor, start, end),
+                "WHERE dataset=%s AND sensor=%s "
+                "AND (%s::timestamptz IS NULL OR timestamp >= %s::timestamptz) "
+                "AND (%s::timestamptz IS NULL OR timestamp <= %s::timestamptz) ORDER BY timestamp",
+                (scenario, sensor, start, start, end, end),
             )
         ]
 
@@ -124,9 +137,13 @@ def detect_alerts(readings: list[dict]) -> list[dict]:
     return alerts
 
 
-def dataset_range(path):
-    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
-        start, end = db.execute(
-            "SELECT MIN(timestamp), MAX(timestamp) FROM measurements"
+def dataset_range(database, scenario="demo"):
+    with connect(database, readonly=True) as db:
+        row = db.execute(
+            "SELECT MIN(timestamp) AS start, MAX(timestamp) AS end FROM measurements WHERE dataset=%s",
+            (scenario,),
         ).fetchone()
-    return {"start": start, "end": end, "timezone": "UTC"}
+    return {
+        **{key: value.isoformat() if value else None for key, value in row.items()},
+        "timezone": "UTC",
+    }

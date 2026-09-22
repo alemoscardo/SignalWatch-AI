@@ -7,12 +7,20 @@ from .telemetry import SENSORS
 
 def render_report(report: str, trace: list) -> str:
     evidence = evidence_index(trace)
-    # Keep full versions in the trace, but use a readable label in the report.
+    # Abbreviate hashes in prose without changing versioned citation IDs.
+    parts = CITATION.split(report)
     for row in evidence.values():
         version = row.get("version", "")
         if len(version) == 64:
-            report = report.replace(version, "consulted version")
-            report = report.replace(version[:12], "consulted version")
+            for index in range(0, len(parts), 2):
+                parts[index] = (
+                    parts[index]
+                    .replace(version, "consulted version")
+                    .replace(version[:12], "consulted version")
+                )
+    report = "".join(
+        part if index % 2 == 0 else f"[ref:{part}]" for index, part in enumerate(parts)
+    )
     cited = {}
 
     def citation(reference):
@@ -53,7 +61,7 @@ def render_report(report: str, trace: list) -> str:
             else:
                 title = f"{row['title']} · {row['section']}"
                 body = f"<p>{escape(row['text'])}</p>"
-                body += f"<small>{escape(row['document'])}</small>"
+                body += f"<small>{escape(row['document'])} · {escape(str(row.get('equipment', 'historical')))} · revision {escape(str(row.get('revision', 'unknown')))}</small>"
             rendered += (
                 f'<details id="evidence-{number}" class="evidence-source">'
                 f'<summary tabindex="-1">[{number}] {escape(title)}</summary>{body}</details>'

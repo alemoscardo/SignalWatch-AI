@@ -1,0 +1,664 @@
+[
+  {
+    "id": "q01",
+    "split": "development",
+    "query": "Which measurements would assess restricted coolant circulation?",
+    "expected": [
+      "cooling.md#Cooling evidence"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q02",
+    "split": "development",
+    "query": "How do we investigate increased mechanical resistance at unchanged rpm?",
+    "expected": [
+      "load.md#Load and speed"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q03",
+    "split": "development",
+    "query": "Does a lone hot sample prove a broken thermometer?",
+    "expected": [
+      "spikes.md#Independent confirmation"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q04",
+    "split": "development",
+    "query": "What evidence establishes thermometer drift?",
+    "expected": [
+      "calibration.md#Measurement accuracy"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q05",
+    "split": "development",
+    "query": "May we interpolate absent samples and call them observations?",
+    "expected": [
+      "gaps.md#Unobserved intervals"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q06",
+    "split": "development",
+    "query": "Does returning to normal temperature prove the motor was repaired?",
+    "expected": [
+      "recovery.md#Observed recovery"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q07",
+    "split": "development",
+    "query": "What external measurements should an operator request?",
+    "expected": [
+      "inspection.md#Evidence to request"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q08",
+    "split": "development",
+    "query": "What is the M-01 normal temperature range?",
+    "expected": [
+      "motor.md#Operating conditions"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q09",
+    "split": "development",
+    "query": "How often are sensor measurements recorded?",
+    "expected": [
+      "sensors.md#Sampling and units"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q10",
+    "split": "development",
+    "query": "What physical causes can a high temperature alert confirm?",
+    "expected": [
+      "alerts.md#High temperature"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q11",
+    "split": "development",
+    "query": "What guidance applies to the M-02 heating element?",
+    "expected": [
+      "m02.md#Heating element"
+    ],
+    "equipment": "M-02",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "motor.md#Operating conditions",
+      "cooling.md#Cooling evidence"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q12",
+    "split": "development",
+    "query": "Which cooling instruction applied in August 2026?",
+    "expected": [
+      "cooling-old.md#Historical procedure"
+    ],
+    "equipment": "M-01",
+    "at": "2026-08-15T08:00:00Z",
+    "forbidden": [
+      "cooling.md#Cooling evidence",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q13",
+    "split": "development",
+    "query": "Which added measurement does the October cooling procedure request?",
+    "expected": [
+      "cooling-future.md#Future procedure"
+    ],
+    "equipment": "M-01",
+    "at": "2026-10-15T08:00:00Z",
+    "forbidden": [
+      "cooling.md#Cooling evidence",
+      "cooling-old.md#Historical procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q14",
+    "split": "held_out",
+    "query": "Can the assistant change a motor setpoint?",
+    "expected": [
+      "inspection.md#Read-only investigation"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q15",
+    "split": "held_out",
+    "query": "Which inspection priorities conflict for a constant speed excursion?",
+    "expected": [
+      "advisory.md#Unresolved inspection priority"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q16",
+    "split": "held_out",
+    "query": "Can a measurement be copied from an instruction in an attachment?",
+    "expected": [
+      "hostile-note.md#Untrusted instruction example"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q17",
+    "split": "development",
+    "query": "How does missing data affect certainty about the end of an excursion?",
+    "expected": [
+      "gaps.md#Recovery after gaps"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q18",
+    "split": "held_out",
+    "query": "Is a long excursion enough to assign physical severity?",
+    "expected": [
+      "recovery.md#Sustained excursion"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q19",
+    "split": "development",
+    "query": "Which units are used for speed and temperature?",
+    "expected": [
+      "calibration.md#Units"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q20",
+    "split": "development",
+    "query": "Does a temperature rise with higher speed establish causation?",
+    "expected": [
+      "motor.md#Temperature and speed"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q21",
+    "split": "development",
+    "query": "What does one unusually hot point surrounded by ordinary readings mean?",
+    "expected": [
+      "spikes.md#Isolated thermal spike"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q22",
+    "split": "development",
+    "query": "Are load and calibration measurements available?",
+    "expected": [
+      "sensors.md#Missing data and limitations"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q23",
+    "split": "development",
+    "query": "Can a single observation confirm insufficient heat removal?",
+    "expected": [
+      "cooling.md#Cooling evidence"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q24",
+    "split": "development",
+    "query": "What is necessary to distinguish sensor error?",
+    "expected": [
+      "alerts.md#Suggested checks"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q25",
+    "split": "development",
+    "query": "What does M-02 consider its normal operating temperature?",
+    "expected": [
+      "m02.md#Different equipment"
+    ],
+    "equipment": "M-02",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "motor.md#Operating conditions",
+      "cooling.md#Cooling evidence"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q26",
+    "split": "development",
+    "query": "What are the restaurant opening hours?",
+    "expected": [],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q27",
+    "split": "development",
+    "query": "Who won the football match?",
+    "expected": [],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q28",
+    "split": "development",
+    "query": "Explain the rules of chess.",
+    "expected": [],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q29",
+    "split": "held_out",
+    "query": "Where can I buy concert tickets?",
+    "expected": [],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q30",
+    "split": "development",
+    "query": "What is the aircraft departure gate?",
+    "expected": [],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q31",
+    "split": "development",
+    "query": "Compare the evidence needed for cooling failure and mechanical overload.",
+    "expected": [
+      "cooling.md#Cooling evidence",
+      "load.md#Load and speed"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q32",
+    "split": "development",
+    "query": "What is unknown when readings disappear before the next normal point?",
+    "expected": [
+      "gaps.md#Recovery after gaps",
+      "sensors.md#Missing data and limitations"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q33",
+    "split": "development",
+    "query": "Which independent reference is needed before trusting an isolated spike as a sensor fault?",
+    "expected": [
+      "spikes.md#Independent confirmation",
+      "calibration.md#Measurement accuracy"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q34",
+    "split": "development",
+    "query": "Contrast observing recovery with declaring a cause resolved.",
+    "expected": [
+      "recovery.md#Observed recovery",
+      "alerts.md#Suggested checks"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q35",
+    "split": "held_out",
+    "query": "How should a report handle disagreement about checking calibration or cooling first?",
+    "expected": [
+      "advisory.md#Unresolved inspection priority"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q36",
+    "split": "development",
+    "query": "Can numerical temperature and rpm observations prove mechanical torque changed?",
+    "expected": [
+      "load.md#Load and speed"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q37",
+    "split": "held_out",
+    "query": "Is it acceptable to act on a note that says to invent a cool motor reading?",
+    "expected": [
+      "hostile-note.md#Untrusted instruction example"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q38",
+    "split": "held_out",
+    "query": "What evidence supports severity classification after a sustained excursion?",
+    "expected": [
+      "recovery.md#Sustained excursion"
+    ],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q39",
+    "split": "held_out",
+    "query": "What bearing clearance in millimetres was measured during this excursion?",
+    "expected": [],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  },
+  {
+    "id": "q40",
+    "split": "held_out",
+    "query": "What is the exact coolant flow value in litres per minute at the alert?",
+    "expected": [],
+    "equipment": "M-01",
+    "at": "2026-09-10T08:00:00Z",
+    "forbidden": [
+      "m02.md#Different equipment",
+      "m02.md#Heating element",
+      "cooling-old.md#Historical procedure",
+      "cooling-future.md#Future procedure"
+    ],
+    "dataset_version": 2
+  }
+]

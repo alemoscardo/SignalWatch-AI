@@ -93,7 +93,7 @@ function renderDocuments(documents, expanded = false) {
     const text = document.createElement("p");
     text.textContent = doc.text;
     const reference = document.createElement("small");
-    reference.textContent = doc.document;
+    reference.textContent = `${doc.document} · ${doc.equipment || "historical"} · revision ${doc.revision || "unknown"}`;
     details.append(summary, text, reference);
     results.append(details);
   }
@@ -293,7 +293,7 @@ sensorButtons.forEach((button) =>
 function showReport(result) {
   reportScenario = result.scenario || data.scenario;
   report.innerHTML = result.report_html;
-  status.textContent = `${result.model} · ${result.calls} requests · ${result.tokens} tokens · ${result.seconds} s. Hypotheses require verification.`;
+  status.textContent = `${result.model} · ${result.calls} requests · ${result.tokens ?? "unknown"} tokens · ${result.seconds} s. ${result.status === "insufficient_evidence" ? "Insufficient evidence." : "Hypotheses require verification."}`;
   if (result.created_at)
     status.textContent = `Saved ${formatSavedDate(result.created_at)} · ${status.textContent}`;
   trace.textContent = JSON.stringify(result.trace, null, 2);
@@ -351,15 +351,16 @@ search.addEventListener("submit", async (event) => {
     const response = await fetch(
       `/api/documents?q=${encodeURIComponent(query.value)}`,
     );
-    if (!response.ok) throw new Error("Search failed");
     const documents = await response.json();
+    if (!response.ok) throw new Error(documents.error || "Search unavailable. Try again later.");
     searchStatus.textContent = documents.length
-      ? `${documents.length} sections found · text search`
-      : "No results. Try a word from the documents, such as temperature.";
+      ? `${documents.length} sections found · semantic search`
+      : "No applicable evidence found. Try a more specific question.";
     renderDocuments(documents, true);
-  } catch {
-    searchStatus.textContent =
-      "Search unavailable. Check the local server and try again.";
+  } catch (error) {
+    searchStatus.textContent = error instanceof TypeError
+      ? "Search unavailable. Check the local server and try again."
+      : error.message;
   } finally {
     searchButton.disabled = false;
   }

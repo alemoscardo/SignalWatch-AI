@@ -39,7 +39,7 @@ class HistoryProgressTests(unittest.TestCase):
         self.body = {"alert_id": self.alert["id"], "context": "Look back two hours"}
 
     def test_saved_report_survives_app_restart_and_keeps_snapshots(self):
-        telemetry_before = self.path.read_bytes()
+        telemetry_before = read_measurements(self.path, "temperature")
         with patch("signalwatch_ai.web.investigate", return_value=self.result):
             response = self.client.post("/api/investigate", json=self.body)
         self.assertEqual(response.status_code, 200)
@@ -58,12 +58,12 @@ class HistoryProgressTests(unittest.TestCase):
         self.assertEqual(
             client.get("/api/investigations?scenario=bad").status_code, 400
         )
-        self.assertEqual(self.path.read_bytes(), telemetry_before)
+        self.assertEqual(read_measurements(self.path, "temperature"), telemetry_before)
 
     def test_stream_sends_progress_before_result_and_saves_once(self):
         completed = []
 
-        def events(*args):
+        def events(*args, **kwargs):
             yield {"type": "progress", "message": "Reading measurements…"}
             completed.append(True)
             yield {"type": "result", "result": self.result}
@@ -86,7 +86,7 @@ class HistoryProgressTests(unittest.TestCase):
         self.assertEqual(len(self.client.get("/api/investigations").json), 1)
 
     def test_stream_failure_is_explicit_and_does_not_save(self):
-        def events(*args):
+        def events(*args, **kwargs):
             yield {"type": "progress", "message": "Waiting for the model…"}
             raise RuntimeError("OpenRouter rate limit reached. Try again later.")
 
@@ -126,8 +126,11 @@ class HistoryProgressTests(unittest.TestCase):
                 self.path, self.alert, "", lambda _: next(responses)
             )
             self.assertIn("Waiting", next(events)["message"])
+            self.assertEqual(next(events)["type"], "metrics")
+            self.assertEqual(next(events)["type"], "metrics")
             self.assertIn("Reading", next(events)["message"])
             self.assertEqual(execute.call_count, 0)
+            self.assertEqual(next(events)["type"], "tool")
             self.assertIn("Searching", next(events)["message"])
             self.assertEqual(execute.call_count, 1)
             remaining = list(events)

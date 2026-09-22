@@ -16,6 +16,9 @@ class AgentTests(unittest.TestCase):
 
     def test_real_tool_execution_between_simulated_model_responses(self):
         messages_seen = []
+        doc_id = execute_tool(self.path, "search_documents", '{"query":"cooling"}')[0][
+            "id"
+        ]
         responses = iter(
             [
                 reply(
@@ -46,7 +49,7 @@ class AgentTests(unittest.TestCase):
                 reply(
                     {
                         "role": "assistant",
-                        "content": "Observations: [ref:temperature@2026-09-10T08:00:00+00:00] [ref:alerts-1]",
+                        "content": f"Observations: [ref:temperature@2026-09-10T08:00:00+00:00] [ref:{doc_id}]",
                     }
                 ),
             ]
@@ -175,7 +178,7 @@ class ResponseTests(unittest.TestCase):
             result.update(model=None, usage=usage)
             message, model, tokens = normalize_response(result)
             self.assertEqual(message, {"role": "assistant", "content": "Report"})
-            self.assertEqual((model, tokens), ("unknown", 0))
+            self.assertEqual((model, tokens), ("unknown", None))
 
     def test_duplicate_call_ids_are_rejected(self):
         call = {

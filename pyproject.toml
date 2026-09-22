@@ -8,13 +8,14 @@ version = "0.1.0"
 description = "Synthetic telemetry investigation with a small Python AI agent"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["Flask>=3.1,<4", "python-dotenv>=1,<2", "markdown-it-py>=3,<5"]
+dependencies = ["Flask>=3.1,<4", "python-dotenv>=1,<2", "markdown-it-py>=3,<5", "psycopg[binary]==3.2.10", "sentence-transformers==5.1.1", "scikit-learn==1.7.2", "scipy==1.15.3", "numpy==2.2.6"]
 
 [project.scripts]
 signalwatch = "signalwatch_ai.web:main"
+signalwatch-db = "signalwatch_ai.commands:main"
 
 [tool.setuptools.package-data]
-signalwatch_ai = ["templates/*.html", "static/*", "documents/*.md"]
+signalwatch_ai = ["templates/*.html", "static/*", "documents/*.md", "documents/*.json", "schema.sql", "evaluation/*.json"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

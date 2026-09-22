@@ -1,47 +1,7 @@
-"""Small, literal word search over versioned synthetic Markdown sections."""
+"""Shared evidence indexing and citation parsing."""
 
-import hashlib
-from pathlib import Path
 import re
-
 from markdown_it import MarkdownIt
-
-DOCUMENTS = Path(__file__).parent / "documents"
-
-
-def document_sections() -> list[dict]:
-    sections = []
-    for path in sorted(DOCUMENTS.glob("*.md")):
-        text = path.read_text(encoding="utf-8")
-        version = hashlib.sha256(text.encode()).hexdigest()
-        title = text.splitlines()[0].removeprefix("# ")
-        for index, section in enumerate(text.split("\n## ")[1:], 1):
-            heading, _, body = section.partition("\n")
-            sections.append(
-                {
-                    "id": f"{path.stem}-{index}",
-                    "document": path.name,
-                    "title": title,
-                    "section": heading,
-                    "text": body.strip(),
-                    "version": version,
-                }
-            )
-    return sections
-
-
-def search_documents(query: str) -> list[dict]:
-    words = set(re.findall(r"\w+", query.casefold()))
-    if not words:
-        return []
-    matches = []
-    for section in document_sections():
-        content = " ".join(section[key] for key in ("title", "section", "text"))
-        score = len(words & set(re.findall(r"\w+", content.casefold())))
-        if score:
-            matches.append((score, section))
-    return [section for _, section in sorted(matches, key=lambda item: -item[0])]
-
 
 # Validation and presentation use the same evidence and Markdown boundaries.
 CITATION = re.compile(r"\[ref:([^\]\n]+)\]")

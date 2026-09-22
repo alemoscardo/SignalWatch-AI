@@ -1,0 +1,22 @@
+{
+  "numeric_consistency": {
+    "verdict": "pass",
+    "reason": "For r06, the reported alert temperature, threshold and cited temperature samples match the retrieved telemetry. The report does not invent a numerical measurement."
+  },
+  "citation_support": {
+    "verdict": "fail",
+    "reason": "The report cites alerts-2-7dc0bca5fcd3c6d6 for the statement that the detector raises an alert strictly above 80 °C, but that retrieved passage discusses missing cooling measurements and recovery rather than the threshold rule."
+  },
+  "missing_data": {
+    "verdict": "fail",
+    "reason": "The report says motor speed measurements are absent, although the attempt only retrieved temperature and the speed tool was available. It correctly identifies coolant and independent-temperature measurements as missing."
+  },
+  "conflicts": {
+    "verdict": "not_applicable",
+    "reason": "Case r06 did not test conflicting applicable documents."
+  },
+  "causal_restraint": {
+    "verdict": "pass",
+    "reason": "The report presents inadequate heat removal and sensor error as hypotheses and explicitly says that high temperature does not confirm cooling failure."
+  }
+}

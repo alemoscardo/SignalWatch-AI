@@ -1,20 +1,11 @@
-"""Store completed investigation snapshots locally, without model access."""
+"""Save complete investigation snapshots in PostgreSQL, outside model tools."""
 
-from contextlib import closing
 from datetime import datetime, timezone
-import json
-import sqlite3
+from psycopg.types.json import Jsonb
+from .database import connect
 
 
-def initialize(path):
-    with closing(sqlite3.connect(path)) as db, db:
-        db.execute("""CREATE TABLE IF NOT EXISTS investigations (
-            id INTEGER PRIMARY KEY, created_at TEXT NOT NULL,
-            scenario TEXT NOT NULL, alert_time TEXT NOT NULL, payload TEXT NOT NULL
-        )""")
-
-
-def save(path, scenario, alert, context, result):
+def save(database, scenario, alert, context, result):
     created_at = datetime.now(timezone.utc).isoformat()
     payload = {
         **result,
@@ -23,34 +14,34 @@ def save(path, scenario, alert, context, result):
         "context": context,
         "created_at": created_at,
     }
-    with closing(sqlite3.connect(path)) as db, db:
-        cursor = db.execute(
-            "INSERT INTO investigations (created_at, scenario, alert_time, payload) VALUES (?, ?, ?, ?)",
-            (
-                created_at,
-                scenario,
-                alert["timestamp"],
-                json.dumps(payload, ensure_ascii=False),
-            ),
-        )
-        return cursor.lastrowid
+    with connect(database) as db:
+        return db.execute(
+            "INSERT INTO investigations(created_at, scenario, alert_time, payload) "
+            "VALUES (%s, %s, %s, %s) RETURNING id",
+            (created_at, scenario, alert["timestamp"], Jsonb(payload)),
+        ).fetchone()["id"]
 
 
-def list_reports(path, scenario=None):
-    with closing(sqlite3.connect(path)) as db:
-        db.row_factory = sqlite3.Row
-        return [
-            dict(row)
-            for row in db.execute(
-                "SELECT id, created_at, alert_time, scenario FROM investigations WHERE (? IS NULL OR scenario = ?) ORDER BY id DESC",
-                (scenario, scenario),
-            )
-        ]
+def list_reports(database, scenario=None):
+    with connect(database, readonly=True) as db:
+        rows = db.execute(
+            "SELECT id, created_at, alert_time, scenario FROM investigations "
+            "WHERE (%s::text IS NULL OR scenario=%s) ORDER BY id DESC",
+            (scenario, scenario),
+        ).fetchall()
+    return [
+        {
+            **row,
+            "created_at": row["created_at"].isoformat(),
+            "alert_time": row["alert_time"].isoformat(),
+        }
+        for row in rows
+    ]
 
 
-def load(path, report_id):
-    with closing(sqlite3.connect(path)) as db:
+def load(database, report_id):
+    with connect(database, readonly=True) as db:
         row = db.execute(
-            "SELECT payload FROM investigations WHERE id = ?", (report_id,)
+            "SELECT payload FROM investigations WHERE id=%s", (report_id,)
         ).fetchone()
-        return json.loads(row[0]) if row else None
+    return row["payload"] if row else None

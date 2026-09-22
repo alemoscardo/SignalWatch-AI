@@ -3,7 +3,7 @@
 from contextlib import closing
 import json
 import os
-import sqlite3
+from signalwatch_ai.database import connect
 from threading import Event, Thread
 import unittest
 from unittest.mock import patch
@@ -54,10 +54,10 @@ class BrowserTests(unittest.TestCase):
         self.page.wait_for_function(
             "document.querySelector('#chart').data?.length === 3"
         )
-        self.timeline = self.path.with_name(
-            f"{self.path.stem}-timeline{self.path.suffix}"
+        self.timeline = self.path
+        self.alerts = detect_alerts(
+            read_measurements(self.timeline, "temperature", scenario="timeline")
         )
-        self.alerts = detect_alerts(read_measurements(self.timeline, "temperature"))
 
     def complete_report(self):
         measurements = execute_tool(
@@ -88,9 +88,11 @@ class BrowserTests(unittest.TestCase):
             "seconds": 0.1,
         }
         path = self.timeline
-        alert = detect_alerts(read_measurements(path, "temperature"))[0]
+        alert = detect_alerts(
+            read_measurements(path, "temperature", scenario="timeline")
+        )[0]
         history.save(
-            self.path.with_name(f"{self.path.stem}-investigations.sqlite3"),
+            self.path,
             "timeline",
             alert,
             "Review previous readings",
@@ -123,6 +125,26 @@ class BrowserTests(unittest.TestCase):
         page.mouse.move(coords["x"], coords["y"])
         expect(page.locator("#chart .hovertext")).to_be_visible()
         page.mouse.click(coords["x"], coords["y"])
+
+    def test_search_explains_invalid_input_and_server_failure(self):
+        page = self.page
+        page.locator(".sources > summary").click()
+        page.locator("#query").fill("!!!")
+        page.locator("#search button").click()
+        expect(page.locator("#search-status")).to_contain_text(
+            "meaningful search question"
+        )
+        page.route(
+            "**/api/documents?*",
+            lambda route: route.fulfill(
+                status=503,
+                content_type="application/json",
+                body=json.dumps({"error": "Knowledge base needs preparation."}),
+            ),
+        )
+        page.locator("#query").fill("cooling")
+        page.locator("#search button").click()
+        expect(page.locator("#search-status")).to_contain_text("needs preparation")
 
     def test_chart_first_and_alert_selection(self):
         page = self.page
@@ -234,7 +256,7 @@ class BrowserTests(unittest.TestCase):
         release = Event()
         self.addCleanup(release.set)
 
-        def events(*args):
+        def events(*args, **kwargs):
             yield {"type": "progress", "message": "Searching documents…"}
             if not release.wait(10):
                 raise RuntimeError("Test timed out")
@@ -266,9 +288,9 @@ class BrowserTests(unittest.TestCase):
         page.locator("#query").fill("cooling")
         page.locator("#search button").click()
         expect(page.locator("#search-status")).to_contain_text("sections found")
-        with closing(sqlite3.connect(self.timeline)) as connection, connection:
+        with connect(self.timeline) as connection:
             connection.execute(
-                "UPDATE measurements SET value = 64 WHERE sensor = 'temperature'"
+                "UPDATE measurements SET value = 64 WHERE dataset='timeline' AND sensor = 'temperature'"
             )
         page.reload()
         page.wait_for_function("document.querySelector('#chart').data?.length === 3")

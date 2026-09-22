@@ -1,99 +1,148 @@
 # SignalWatch AI
 
-Local synthetic telemetry investigation with Python, SQLite and a browser interface. The original C# SignalWatch is separate.
+A local synthetic telemetry investigation app with Python, PostgreSQL/pgvector and a browser interface. A local encoder searches technical guidance; a free OpenRouter model investigates with read-only tools. The original C# SignalWatch repository is separate.
 
-## Run locally
+## Setup on Windows
 
-Python 3.11 or later. Run from the repository root:
+Use Python 3.12 and Docker Desktop with Linux containers. The tested dependency versions are in `requirements.lock`; the encoder runs on CPU. The initial package/model download requires internet access.
 
 ```powershell
 python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.lock
 .\.venv\Scripts\python.exe -m pip install -e .
 Copy-Item .env.example .env
 ```
 
-Copy the example only if you do not already have `.env`. Paste your OpenRouter key after `OPENROUTER_API_KEY=`, then start the app:
+Copy the example only if `.env` does not exist. Choose a local database password, put it in `SIGNALWATCH_DB_PASSWORD` and the password portion of `DATABASE_URL`, and add your existing OpenRouter key. Keep `.env` private. Credentials stay on the server. Existing environment variables take precedence.
 
 ```powershell
-.\.venv\Scripts\python.exe -m signalwatch_ai.web
+docker compose up -d --wait
+.\.venv\Scripts\signalwatch-db.exe init
 ```
 
-Open [the local app](http://127.0.0.1:5055). Use `--port 5056` if needed. The server binds to loopback with debugging disabled. The `.env` file is loaded from the working directory; existing environment variables take precedence. Restart after changing configuration. Keys and local databases are ignored by Git. Never put keys in browser code or commit them.
+For existing SQLite data, migrate before seeding. See the next section. For a fresh demo:
+
+```powershell
+.\.venv\Scripts\signalwatch-db.exe seed
+.\.venv\Scripts\signalwatch-db.exe encoder-setup
+.\.venv\Scripts\signalwatch-db.exe prepare
+.\.venv\Scripts\signalwatch.exe
+```
+
+Open [the local app](http://127.0.0.1:5055). `--port 5056` chooses another port. The server binds to loopback with debugging disabled. PostgreSQL is exposed only on `127.0.0.1:55432` and persists in the Compose volume. Do not delete that volume to restart the app.
+
+`encoder-setup` downloads the pinned pretrained model once. It refuses to overwrite an existing model directory. `prepare` reads the catalog, validates documents, splits sections, computes embeddings and publishes a corpus generation transactionally. Stop the app before preparing or migrating. If sources change, new investigations are blocked until preparation succeeds. Previously saved reports retain their evidence snapshots.
+
+## Migrating the previous SQLite demo
+
+Stop the previous app before migrating so no new legacy reports are written after the snapshot. The migration reads originals without changing them and makes consistent SQLite backups, including committed WAL contents, in `data/local/migration-backups/`.
+
+```powershell
+.\.venv\Scripts\signalwatch-db.exe migrate PATH_TO_OLD_DATA/demo.sqlite3 --dataset demo
+.\.venv\Scripts\signalwatch-db.exe migrate PATH_TO_OLD_DATA/demo-timeline.sqlite3 --dataset timeline
+.\.venv\Scripts\signalwatch-db.exe migrate PATH_TO_OLD_DATA/demo-investigations.sqlite3
+```
+
+Also import any `demo-missing`, `demo-spike`, `demo-steady-speed` and `demo-sustained` files with their matching `--dataset`. Then run `seed` to create only datasets that have no readings. Import verifies exact values, UTC timestamps, gaps, alert results and report payloads before committing. Identical imports are recognized. Different readings in an existing dataset or conflicting report IDs fail without overwriting records. Keep original files as recovery copies. PostgreSQL is the only active database after migration; there is no SQLite fallback or dual write.
+
+Before accepting new PostgreSQL reports, verify the imported history. Returning to the old app later requires preserving/exporting any new PostgreSQL reports; the old SQLite snapshot will not contain them.
 
 ## Using the demo
 
-The app opens a single continuous telemetry history. Drag to pan, use the Zoom control to inspect an interval, and click an amber alert marker to open its details. Only then do the context field and **Investigate** action appear. **Close** returns to the graph. Keyboard users can tab through alert buttons, which become visible on focus. Selecting an alert never starts a model request.
+The graph presents a continuous 24-hour history with five synthetic episodes and six temperature alerts. Pan, zoom, and select an amber alert marker. Selection never makes a model call. Add optional context and choose Investigate. The model chooses its own measurement intervals and how many tool calls it needs.
 
-Reports appear below the graph. One loading notice displays actual agent activity. Alert changes are disabled during generation, and selecting another alert clears the previous report and trace.
+Citations open retrieved source snapshots. Measurement citations also highlight the matching sample. Reports support safe Markdown; model HTML and images are disabled. Previous investigations reopen without a model call and keep their original evidence even after documents change. Older dataset citations open their snapshot without being placed on an unrelated graph.
 
-Reports support Markdown headings, emphasis, lists and tables. Numbered document citations open the retrieved section. Measurement citations select the matching sensor and highlight the exact sample on the graph, while also opening its source snapshot. The locally bundled Plotly.js chart supports hover values, click selection, drag-to-zoom, pan and reset. Use Left/Right arrow keys while the graph is focused to inspect readings. Citation navigation resets the view so the selected measurement is visible. All alert starts have amber markers, with the selected alert shown larger and darker. Clicking a marker opens the alert details without starting an investigation. Alert changes are disabled while an investigation runs. Inline code citations are supported; fenced code and existing link labels do not count as citations. Repeated references share a source card. Model HTML and images are disabled. Full document hashes and tool calls remain available in the technical trace. Completed investigations are saved automatically in `data/local/demo-investigations.sqlite3`, including the report, evidence snapshots, scenario, alert, additional context and model metadata. Open **Previous investigations** to reload saved reports, including reports from older demo datasets, without another model call. Historical snapshots stay unchanged. Citations from older datasets open their snapshots instead of being overlaid onto a different history.
+The knowledge-base status reports readiness, document count and generation. Fifteen fictional Markdown documents contain 26 passages, including other-equipment, archived, future, conflicting and untrusted guidance. The catalog assigns equipment and half-open validity intervals. The model cannot override these filters: M-01 investigations use general or M-01 guidance valid at the selected alert time.
 
-The document catalog and search use the same renderer. Search matches literal words in three fictional Markdown documents; it is not semantic retrieval.
+## Agent and retrieval behaviour
 
-## Data and detection
+The two tools are `read_measurements(sensor, start, end)` and `search_documents(query)`. Python validates arguments and executes predefined PostgreSQL queries through read-only connections. No arbitrary SQL, shell or equipment controls are exposed. Application code separately saves reports.
 
-The main history spans 24 hours, from 10 September 2026 at 08:00 UTC through 11 September at 08:00 UTC, sampled every minute except for the explicit data gap. Five synthetic episodes are spaced four hours apart, with ordinary readings between episodes. It is a generated demonstration history, not a reconstruction of real incidents.
+The local `all-MiniLM-L6-v2` encoder produces 384-dimensional vectors. pgvector computes exact cosine similarity over eligible passages. Semantic retrieval is the app default, selected using development cases. A word-overlap baseline and combined ranking remain available in the evaluation command. Up to five deduplicated passages are returned per query. This is not an investigation call-count or time-window limit. A provisional similarity cutoff of 0.35 filters candidates; it is not a probability of correctness and does not eliminate every irrelevant result.
 
-The history is stored in `data/local/demo-timeline.sqlite3`. Existing short demo datasets and saved reports are preserved. The UI always displays the continuous history, including when opening an old scenario URL. Legacy scenarios remain available to tests and API clients. The model receives the actual dataset time range with each investigation.
+Both evidence tools must execute successfully. Every available source category must be cited. If a successful tool returns no evidence, the report must explicitly state `Insufficient evidence`; missing evidence is allowed, fabricated citations are not. A tool/database error is not a successful empty result. One guided citation-repair opportunity is allowed. These checks establish reference existence and retrieval, not semantic support of every claim. The `references_valid` result status means both source categories were retrieved and cited, not a verified physical diagnosis.
 
-| Episode | Synthetic behavior |
-| --- | --- |
-| Peak with rising motor speed | Temperature and speed rise together. |
-| Sustained high temperature | Temperature stays at 92 °C from 13:30 through 15:00; speed is constant. |
-| Missing samples | Both sensors omit 17:36–17:50; the graph breaks across the gap. |
-| Isolated spike | One 95 °C sample at 21:45, surrounded by 64 °C samples. |
-| High temperature, constant speed | Original temperature profile with speed fixed at 1200 rpm. |
+Thresholds remain deterministic Python: temperature strictly above 80 degrees Celsius, one alert per continuous excursion. Missing minutes break continuity. There are no configured speed or missing-data alarms. Reports must distinguish observations, hypotheses, missing data and suggested checks. Correlation does not establish a physical cause.
 
-All six alert markers in this history represent temperature threshold exceedances. Python detects entry above 80 °C, producing one alert per continuous excursion. No speed or missing-data alarm rules are configured. Equality is normal. Missing minutes break continuity; recovery across a gap is not inferred. The graph includes measurements after the selected alert. Synthetic patterns do not establish physical causes.
+OpenRouter requests accept only `openrouter/free` or IDs ending in `:free`, with provider price limits of zero and no paid fallback. A request has a 90-second network timeout; provider errors stop the investigation. There is no fixed limit on the complete investigation loop. Token usage is unknown when the provider omits it. Trace entries record actual tool arguments, results and duration.
 
-## Agent behavior and limits
+## Evaluation
 
-OpenRouter integration uses the Python standard library and two read-only tools: `read_measurements(sensor, start, end)` and `search_documents(query)`. Measurement queries validate sensors and inclusive timezone-aware intervals and use predefined SQL. The model cannot run arbitrary SQL, shell commands or equipment controls.
-
-Only `openrouter/free` or model IDs ending in `:free` are accepted, with provider price limits set to zero and no paid fallback. Availability and rate limits depend on OpenRouter. The free router may choose different models across requests; a specific tool-capable `:free` model allows more comparable evaluations.
-
-The model chooses when to finish and which intervals to inspect. There is no fixed call-count or lookback cap. Each HTTP request has a 90-second timeout; network/provider errors stop the investigation without retries. Repeated tool requests can keep it running until completion or an error.
-
-Both tools must return evidence and the report must cite both source types. Citations are checked against the retrieved evidence. A rejected report gets one guided correction opportunity, including available references; the model may retrieve missing evidence before resubmitting. A second invalid report is rejected. This repair rule is separate from the unrestricted investigation loop.
-
-Reference validation does not verify semantic support, numerical claims or physical root causes. Offline tests use simulated responses and do not measure real model quality. Live-model evaluation and direct OpenAI/Claude integrations remain planned. Product text and model instructions are English.
-
-## Verify offline
+Retrieval evaluation runs the actual local encoder and PostgreSQL search without generation API calls. Forty labelled synthetic queries are split into 30 development and 10 held-out cases. The latter are reported without tuning to them. Both expected-passage coverage and false positives matter; first-five success alone is not a reliability guarantee.
 
 ```powershell
-python -m unittest discover -s tests -v
+.\.venv\Scripts\signalwatch-db.exe evaluate retrieval --split development
+.\.venv\Scripts\signalwatch-db.exe evaluate retrieval --split held_out
+```
+
+For real-model evaluation, select a specific tool-capable `:free` model in `.env`. The automatic free router is rejected for comparable evaluations. Twelve scenarios cover telemetry patterns, missing facts, conflicting guidance and hostile input.
+
+```powershell
+.\.venv\Scripts\signalwatch-db.exe evaluate reports --mode semantic --live
+```
+
+Use `--attempts 3` for repeated trials when provider availability permits. This controls evaluation repetitions, not agent tool calls. Runs, failures and snapshots are stored in PostgreSQL; exports go to `reports/local/`. Interrupted runs remain visible. A hard process termination can leave a `running` record, which must not be counted as a completed attempt.
+
+A reference-valid report has no automatic semantic-quality score. Review numerical consistency, citation support, missing data, conflicting sources and causal restraint using the rubric in `docs/evaluation-review.json`. Fill each reason and verdict after reading the actual report and source snapshots.
+
+```powershell
+.\.venv\Scripts\signalwatch-db.exe review RUN_ID CASE_ID semantic PATH_TO_COMPLETED_REVIEW.json
+.\.venv\Scripts\signalwatch-db.exe export RUN_ID
+```
+
+The exported comparison reports raw counts, per-case outcomes, timing and pending reviews. Simulated-response tests check software behaviour only. Results and limitations are recorded in [`docs/validation.md`](docs/validation.md). The checked-in `docs/evaluation-review.json` is an evidence-based assistant review for case `r06`; it is an example of the required five-criterion shape, not independent human validation.
+
+## Offline verification
+
+Tests require PostgreSQL and the prepared local encoder. Set `SIGNALWATCH_TEST_DATABASE_URL` to a local connection string whose database name ends in `_test`; its role must be allowed to create databases. Tests create and remove uniquely named disposable databases. They never read OpenRouter credentials and do not call a generation API.
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 node --check src/signalwatch_ai/static/app.js
+.\.venv\Scripts\python.exe -m black --check src tests
 ```
 
-Tests cover thresholds, missing samples, storage isolation, HTTP routes, tool argument validation, malformed provider responses, evidence repair and safe citation rendering. They also verify progress events, saved report snapshots and persistence across app restarts. They make no model API calls and do not load `.env`.
-
-Optional browser regression tests use Playwright and a temporary local server with intercepted investigation responses:
+Browser tests use Playwright with intercepted model responses. With Edge installed:
 
 ```powershell
-python -m pip install playwright
-python -m playwright install chromium
-python tests/browser_smoke.py
+$env:SIGNALWATCH_TEST_BROWSER = "msedge"
+.\.venv\Scripts\python.exe tests/browser_smoke.py
 ```
 
-To use installed Edge instead of downloading Chromium, set `$env:SIGNALWATCH_TEST_BROWSER = "msedge"` before running the browser tests. Browser tests cover the single loading indicator, live progress streams, citation-to-chart navigation, keyboard inspection, saved-report reopening, document search, failed requests and clearing stale reports on alert changes.
+The suite covers PostgreSQL isolation, migration rollback and snapshots, applicability boundaries, failed preparation, encoder limits, invalid inputs, insufficient evidence, citation rendering, progress and history. Browser coverage includes graph navigation, saved reports, document search and errors.
 
-Python uses Black formatting, JavaScript and CSS use Prettier, and the Jinja template uses two-space indentation. These are development tools; the app has no frontend build step.
+## Backup and restore
+
+Create a PostgreSQL custom-format backup inside the container, then copy it without PowerShell binary redirection:
+
+```powershell
+docker compose exec -T postgres pg_dump -U signalwatch -d signalwatch -Fc -f /tmp/signalwatch.dump
+docker compose cp postgres:/tmp/signalwatch.dump data/local/signalwatch.dump
+```
+
+Verify a restore into a new database before relying on the backup:
+
+```powershell
+docker compose exec -T postgres createdb -U signalwatch signalwatch_restore_check
+docker compose exec -T postgres pg_restore -U signalwatch -d signalwatch_restore_check --exit-on-error /tmp/signalwatch.dump
+```
+
+Use a new name if that verification database already exists. Compare table counts and report snapshots. A restore backup includes embeddings and evidence; retain the corresponding source files and encoder files to satisfy readiness checks. `docker compose restart postgres` preserves the named volume. Do not run `down -v` against data you want to keep.
 
 ## Code map
 
-- `telemetry.py`: synthetic data, SQLite reads and deterministic thresholds.
-- `evidence.py`: document search, evidence identifiers and shared citation parsing.
-- `agent.py`: OpenRouter transport, response validation, tools and investigation loop.
-- `presentation.py`: safe report rendering and cited source snapshots.
-- `history.py`: local SQLite storage for completed investigations.
-- `web.py`: HTTP routes and startup.
-- `templates/` and `static/`: page, styling and browser interactions.
-- `documents/`: fictional technical sources.
+- `database.py` and `schema.sql`: connection and versioned schema.
+- `telemetry.py`: synthetic data, measurements and thresholds.
+- `migration.py`: explicit SQLite import and verification.
+- `encoder.py`: model download and local encoding.
+- `knowledge.py`: catalog validation, corpus publication and retrieval.
+- `evidence.py` and `presentation.py`: citations and safe rendering.
+- `agent.py`: OpenRouter transport, tool loop and reference checks.
+- `history.py`: stored investigation snapshots.
+- `evaluation.py` and `commands.py`: evaluation, review/export and setup commands.
+- `web.py`, templates and static files: browser application.
 
-See [the design brief](docs/design-brief.md) for implemented decisions and planned work. Keep the repository private and use only synthetic or suitable public data.
+No framework-based orchestration, ORM, additional agent, vector server or paid service is used. The supported document format is curated English Markdown, not arbitrary PDFs/OCR. Keep the repository private and use synthetic or suitable public data only.
 
-The browser uses a streamed POST response for progress updates, without background jobs or polling. Reloading or leaving the page disconnects that stream. Only completed reports are stored; check Previous investigations before retrying an interrupted request. The JSON API remains available for clients that do not request progress events.
-
-## Bundled chart library
-
-Plotly.js basic 3.5.1 is served from `static/plotly-basic-3.5.1.min.js`, with its MIT license in `static/plotly-LICENSE.txt`. The official bundle was downloaded from https://cdn.plot.ly/plotly-basic-3.5.1.min.js and its license from https://github.com/plotly/plotly.js/blob/v3.5.1/LICENSE. There is no runtime CDN request, JavaScript package install or frontend build requirement. Explicit null samples preserve missing-data gaps. Plotly handles axes, tooltips and zoom; the app handles alerts and evidence selection.
+Plotly.js basic 3.5.1 remains bundled locally with its MIT license. There is no frontend build step or runtime CDN dependency. See the design brief and implementation plan for the scope and remaining quality limitations.

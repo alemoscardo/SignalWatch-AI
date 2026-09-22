@@ -33,6 +33,30 @@ class PresentationTests(unittest.TestCase):
 
 
 class CitationLinkTests(unittest.TestCase):
+    def test_version_abbreviation_preserves_versioned_citation_ids(self):
+        version = "abc123def456" + "a" * 52
+        reference = f"motor-{version[:12]}-1"
+        trace = [
+            {
+                "tool": "search_documents",
+                "result": [
+                    {
+                        "id": reference,
+                        "version": version,
+                        "title": "Motor",
+                        "section": "Range",
+                        "text": "Synthetic",
+                        "document": "motor.md",
+                    }
+                ],
+            }
+        ]
+        html = render_report(f"Version {version}. [ref:{reference}]", trace)
+        self.assertIn('href="#evidence-1"', html)
+        self.assertNotIn("[ref:", html)
+        self.assertNotIn(version, html)
+        self.assertEqual(trace[0]["result"][0]["id"], reference)
+
     def test_sources_are_linked_deduplicated_and_escaped(self):
         trace = [
             {
