@@ -1,10 +1,38 @@
 # SignalWatch AI
 
-A local synthetic telemetry investigation app with Python, PostgreSQL/pgvector and a browser interface. A local encoder searches technical guidance; a free OpenRouter model investigates with read-only tools. The original C# SignalWatch repository is separate.
+A local demo for investigating synthetic motor telemetry with a small Python agent. The app combines a Flask dashboard, PostgreSQL with pgvector, local document retrieval and an optional OpenRouter model. The original C# SignalWatch repository is separate.
 
-## Setup on Windows
+![Selected telemetry alert and investigation panel](docs/screenshots/dashboard-alert-selected.png)
 
-Use Python 3.12 and Docker Desktop with Linux containers. The tested dependency versions are in `requirements.lock`; the encoder runs on CPU. The initial package/model download requires internet access.
+## What the demo does
+
+The dashboard contains a 24-hour synthetic history for motor M-01. Select an amber temperature alert, add context if useful, and ask the agent to investigate it.
+
+The report separates:
+
+- observations from the measurements;
+- hypotheses that still need checking;
+- missing data;
+- suggested next checks;
+- citations to the retrieved measurements and documents.
+
+![Example AI investigation response](docs/screenshots/dashboard-ai-response.png)
+
+| Area | Current implementation |
+| --- | --- |
+| Telemetry | Five synthetic episodes, six temperature alerts and an explicit data gap |
+| Retrieval | `all-MiniLM-L6-v2` embeddings, exact cosine search with pgvector, 15 curated documents and 26 passages |
+| Agent tools | `read_measurements` and `search_documents`, both read-only and parameterized |
+| Storage | PostgreSQL with evidence snapshots for saved reports |
+| Model | A tool-capable free OpenRouter model, configured locally |
+
+The model cannot run SQL, shell commands or equipment controls. Data is synthetic. Keep the repository private and use suitable public data only if you extend it.
+
+## Quick start on Windows
+
+You need Python 3.12, Docker Desktop running Linux containers and internet access for the first model download.
+
+Create the environment and install the pinned dependencies:
 
 ```powershell
 python -m venv .venv
@@ -13,89 +41,69 @@ python -m venv .venv
 Copy-Item .env.example .env
 ```
 
-Copy the example only if `.env` does not exist. Choose a local database password, put it in `SIGNALWATCH_DB_PASSWORD` and the password portion of `DATABASE_URL`, and add your existing OpenRouter key. Keep `.env` private. Credentials stay on the server. Existing environment variables take precedence.
+Edit `.env` and set:
+
+- `SIGNALWATCH_DB_PASSWORD`;
+- the same password in `DATABASE_URL`;
+- `OPENROUTER_API_KEY`, or a specific tool-capable model ending in `:free`.
+
+Keep `.env` private. Credentials stay on the server, and existing environment variables take precedence.
+
+For a fresh demo, run:
 
 ```powershell
 docker compose up -d --wait
 .\.venv\Scripts\signalwatch-db.exe init
-```
-
-For existing SQLite data, migrate before seeding. See the next section. For a fresh demo:
-
-```powershell
 .\.venv\Scripts\signalwatch-db.exe seed
 .\.venv\Scripts\signalwatch-db.exe encoder-setup
 .\.venv\Scripts\signalwatch-db.exe prepare
 .\.venv\Scripts\signalwatch.exe
 ```
 
-Open [the local app](http://127.0.0.1:5055). `--port 5056` chooses another port. The server binds to loopback with debugging disabled. PostgreSQL is exposed only on `127.0.0.1:55432` and persists in the Compose volume. Do not delete that volume to restart the app.
+Open [http://127.0.0.1:5055](http://127.0.0.1:5055). Use `--port 5056` to choose another port. The app binds to loopback, and PostgreSQL is exposed only on `127.0.0.1:55432`.
 
-`encoder-setup` downloads the pinned pretrained model once. It refuses to overwrite an existing model directory. `prepare` reads the catalog, validates documents, splits sections, computes embeddings and publishes a corpus generation transactionally. Stop the app before preparing or migrating. If sources change, new investigations are blocked until preparation succeeds. Previously saved reports retain their evidence snapshots.
+`encoder-setup` downloads the pinned encoder once. `prepare` validates the document catalog, computes embeddings and publishes a corpus generation. Stop the app before running `prepare` or a migration. If the documents change, new investigations stay blocked until preparation succeeds.
 
-## Migrating the previous SQLite demo
+## How to use it
 
-Stop the previous app before migrating so no new legacy reports are written after the snapshot. The migration reads originals without changing them and makes consistent SQLite backups, including committed WAL contents, in `data/local/migration-backups/`.
+1. Click an amber marker in the temperature chart.
+2. Add optional context, such as a time window to review.
+3. Click **Investigate**.
+4. Follow the citations in the report. They open the matching measurement or document snapshot.
 
-```powershell
-.\.venv\Scripts\signalwatch-db.exe migrate PATH_TO_OLD_DATA/demo.sqlite3 --dataset demo
-.\.venv\Scripts\signalwatch-db.exe migrate PATH_TO_OLD_DATA/demo-timeline.sqlite3 --dataset timeline
-.\.venv\Scripts\signalwatch-db.exe migrate PATH_TO_OLD_DATA/demo-investigations.sqlite3
-```
+The graph also includes speed, pan and zoom controls. Previous investigations reopen without another model call and keep their original evidence. The reference-document panel supports a bounded search over the prepared corpus.
 
-Also import any `demo-missing`, `demo-spike`, `demo-steady-speed` and `demo-sustained` files with their matching `--dataset`. Then run `seed` to create only datasets that have no readings. Import verifies exact values, UTC timestamps, gaps, alert results and report payloads before committing. Identical imports are recognized. Different readings in an existing dataset or conflicting report IDs fail without overwriting records. Keep original files as recovery copies. PostgreSQL is the only active database after migration; there is no SQLite fallback or dual write.
+## Evidence boundary
 
-Before accepting new PostgreSQL reports, verify the imported history. Returning to the old app later requires preserving/exporting any new PostgreSQL reports; the old SQLite snapshot will not contain them.
+The Python application owns threshold checks, argument validation, retrieval filters and data-derived numbers. A temperature alert requires a value strictly above 80 °C. A missing minute breaks continuity. There are no configured speed or missing-data alarms.
 
-## Using the demo
+The agent receives the actual dataset range and can call only these tools:
 
-The graph presents a continuous 24-hour history with five synthetic episodes and six temperature alerts. Pan, zoom, and select an amber alert marker. Selection never makes a model call. Add optional context and choose Investigate. The model chooses its own measurement intervals and how many tool calls it needs.
+- `read_measurements(sensor, start, end)`;
+- `search_documents(query)`.
 
-Citations open retrieved source snapshots. Measurement citations also highlight the matching sample. Reports support safe Markdown; model HTML and images are disabled. Previous investigations reopen without a model call and keep their original evidence even after documents change. Older dataset citations open their snapshot without being placed on an unrelated graph.
-
-The knowledge-base status reports readiness, document count and generation. Fifteen fictional Markdown documents contain 26 passages, including other-equipment, archived, future, conflicting and untrusted guidance. The catalog assigns equipment and half-open validity intervals. The model cannot override these filters: M-01 investigations use general or M-01 guidance valid at the selected alert time.
-
-## Agent and retrieval behaviour
-
-The two tools are `read_measurements(sensor, start, end)` and `search_documents(query)`. Python validates arguments and executes predefined PostgreSQL queries through read-only connections. No arbitrary SQL, shell or equipment controls are exposed. Application code separately saves reports.
-
-The local `all-MiniLM-L6-v2` encoder produces 384-dimensional vectors. pgvector computes exact cosine similarity over eligible passages. Semantic retrieval is the app default, selected using development cases. A word-overlap baseline and combined ranking remain available in the evaluation command. Up to five deduplicated passages are returned per query. This is not an investigation call-count or time-window limit. A provisional similarity cutoff of 0.35 filters candidates; it is not a probability of correctness and does not eliminate every irrelevant result.
-
-Both evidence tools must execute successfully. Every available source category must be cited. If a successful tool returns no evidence, the report must explicitly state `Insufficient evidence`; missing evidence is allowed, fabricated citations are not. A tool/database error is not a successful empty result. One guided citation-repair opportunity is allowed. These checks establish reference existence and retrieval, not semantic support of every claim. The `references_valid` result status means both source categories were retrieved and cited, not a verified physical diagnosis.
-
-Thresholds remain deterministic Python: temperature strictly above 80 degrees Celsius, one alert per continuous excursion. Missing minutes break continuity. There are no configured speed or missing-data alarms. Reports must distinguish observations, hypotheses, missing data and suggested checks. Correlation does not establish a physical cause.
-
-OpenRouter requests accept only `openrouter/free` or IDs ending in `:free`, with provider price limits of zero and no paid fallback. A request has a 90-second network timeout; provider errors stop the investigation. There is no fixed limit on the complete investigation loop. Token usage is unknown when the provider omits it. Trace entries record actual tool arguments, results and duration.
+The catalog filters guidance by equipment and alert time. A report must cite every available source category. A successful empty search is reported as `Insufficient evidence`; database or provider errors stop the investigation. Valid citations prove provenance and retrieval, not that a physical diagnosis is correct.
 
 ## Evaluation
 
-Retrieval evaluation runs the actual local encoder and PostgreSQL search without generation API calls. Forty labelled synthetic queries are split into 30 development and 10 held-out cases. The latter are reported without tuning to them. Both expected-passage coverage and false positives matter; first-five success alone is not a reliability guarantee.
+Retrieval evaluation uses the local encoder and PostgreSQL without calling a generation API. The 40 labelled synthetic queries contain 30 development cases and 10 held-out cases.
 
 ```powershell
 .\.venv\Scripts\signalwatch-db.exe evaluate retrieval --split development
 .\.venv\Scripts\signalwatch-db.exe evaluate retrieval --split held_out
 ```
 
-For real-model evaluation, select a specific tool-capable `:free` model in `.env`. The automatic free router is rejected for comparable evaluations. Twelve scenarios cover telemetry patterns, missing facts, conflicting guidance and hostile input.
+For live report evaluation, select one specific tool-capable `:free` model in `.env`:
 
 ```powershell
 .\.venv\Scripts\signalwatch-db.exe evaluate reports --mode semantic --live
 ```
 
-Use `--attempts 3` for repeated trials when provider availability permits. This controls evaluation repetitions, not agent tool calls. Runs, failures and snapshots are stored in PostgreSQL; exports go to `reports/local/`. Interrupted runs remain visible. A hard process termination can leave a `running` record, which must not be counted as a completed attempt.
+Use `--attempts 3` for repeated trials when the provider is available. Results, traces and exports are stored under `reports/local/`, which is intentionally ignored by Git. The automated run checks completion, failures, tool traces, retrieved evidence and citation structure. It does not score the semantic quality of the diagnosis. See [`docs/validation.md`](docs/validation.md) for the limits and the optional review format.
 
-Real-model evaluation is automated by default. It records completion, provider failures, tool traces, retrieved evidence and structural citation checks, but it does not assign a semantic-quality score. The optional `review` command can store a five-criterion human or assistant review for selected reports; using it is not required to complete the automated evaluation.
+## Verification
 
-```powershell
-.\.venv\Scripts\signalwatch-db.exe review RUN_ID CASE_ID semantic PATH_TO_COMPLETED_REVIEW.json
-.\.venv\Scripts\signalwatch-db.exe export RUN_ID
-```
-
-The exported comparison reports raw counts, per-case outcomes, timing and any optional reviews. Simulated-response tests check software behaviour only. Results and limitations are recorded in [`docs/validation.md`](docs/validation.md). The checked-in `docs/evaluation-review.json` is an evidence-based assistant review for case `r06`; it is an example of the optional five-criterion shape, not independent human validation.
-
-## Offline verification
-
-Tests require PostgreSQL and the prepared local encoder. Set `SIGNALWATCH_TEST_DATABASE_URL` to a local connection string whose database name ends in `_test`; its role must be allowed to create databases. Tests create and remove uniquely named disposable databases. They never read OpenRouter credentials and do not call a generation API.
+Tests need PostgreSQL, a prepared encoder and a test connection string whose database name ends in `_test`. They create disposable databases and never call a generation API.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
@@ -103,46 +111,63 @@ node --check src/signalwatch_ai/static/app.js
 .\.venv\Scripts\python.exe -m black --check src tests
 ```
 
-Browser tests use Playwright with intercepted model responses. With Edge installed:
+Browser checks use Playwright with intercepted model responses. With Edge installed:
 
 ```powershell
 $env:SIGNALWATCH_TEST_BROWSER = "msedge"
 .\.venv\Scripts\python.exe tests/browser_smoke.py
 ```
 
-The suite covers PostgreSQL isolation, migration rollback and snapshots, applicability boundaries, failed preparation, encoder limits, invalid inputs, insufficient evidence, citation rendering, progress and history. Browser coverage includes graph navigation, saved reports, document search and errors.
+## More detail
 
-## Backup and restore
+<details>
+<summary>Migrate the previous SQLite demo</summary>
 
-Create a PostgreSQL custom-format backup inside the container, then copy it without PowerShell binary redirection:
+Stop the old app first. Migration reads the source files without changing them and creates consistent backups in `data/local/migration-backups/`.
+
+```powershell
+.\.venv\Scripts\signalwatch-db.exe migrate PATH_TO_OLD_DATA/demo.sqlite3 --dataset demo
+.\.venv\Scripts\signalwatch-db.exe migrate PATH_TO_OLD_DATA/demo-timeline.sqlite3 --dataset timeline
+.\.venv\Scripts\signalwatch-db.exe migrate PATH_TO_OLD_DATA/demo-investigations.sqlite3
+```
+
+Repeat the command for any other legacy dataset, using its matching `--dataset` value. The importer verifies values, timestamps, gaps, alerts and report payloads before committing. Identical imports are safe to repeat. Conflicting readings or report IDs fail without overwriting existing records. PostgreSQL is the only active database after migration.
+
+</details>
+<details>
+<summary>Back up and restore PostgreSQL</summary>
+
+Create a custom-format backup inside the container and copy it out without PowerShell text redirection:
 
 ```powershell
 docker compose exec -T postgres pg_dump -U signalwatch -d signalwatch -Fc -f /tmp/signalwatch.dump
 docker compose cp postgres:/tmp/signalwatch.dump data/local/signalwatch.dump
 ```
 
-Verify a restore into a new database before relying on the backup:
+Restore into a new database before relying on the backup:
 
 ```powershell
 docker compose exec -T postgres createdb -U signalwatch signalwatch_restore_check
 docker compose exec -T postgres pg_restore -U signalwatch -d signalwatch_restore_check --exit-on-error /tmp/signalwatch.dump
 ```
 
-Use a new name if that verification database already exists. Compare table counts and report snapshots. A restore backup includes embeddings and evidence; retain the corresponding source files and encoder files to satisfy readiness checks. `docker compose restart postgres` preserves the named volume. Do not run `down -v` against data you want to keep.
+Keep the source documents and encoder files that match the backup. `docker compose restart postgres` preserves the named volume. Do not use `docker compose down -v` on data you want to keep.
 
-## Code map
+</details>
 
-- `database.py` and `schema.sql`: connection and versioned schema.
+<details>
+<summary>Repository map and scope</summary>
+
 - `telemetry.py`: synthetic data, measurements and thresholds.
+- `database.py`, `schema.sql`: PostgreSQL connection and schema.
 - `migration.py`: explicit SQLite import and verification.
-- `encoder.py`: model download and local encoding.
-- `knowledge.py`: catalog validation, corpus publication and retrieval.
-- `evidence.py` and `presentation.py`: citations and safe rendering.
+- `encoder.py`, `knowledge.py`: local encoding, catalog validation and retrieval.
+- `evidence.py`, `presentation.py`: citations and safe Markdown rendering.
 - `agent.py`: OpenRouter transport, tool loop and reference checks.
-- `history.py`: stored investigation snapshots.
-- `evaluation.py` and `commands.py`: evaluation, review/export and setup commands.
-- `web.py`, templates and static files: browser application.
+- `history.py`: saved investigation snapshots.
+- `evaluation.py`, `commands.py`: evaluation, review and setup commands.
+- `web.py`, `templates/`, `static/`: browser application.
 
-No framework-based orchestration, ORM, additional agent, vector server or paid service is used. The supported document format is curated English Markdown, not arbitrary PDFs/OCR. Keep the repository private and use synthetic or suitable public data only.
+There is no ORM, separate vector server, paid service or frontend build step. The supported knowledge-base format is curated English Markdown, not arbitrary PDF/OCR input. Plotly.js is bundled locally under its MIT license.
 
-Plotly.js basic 3.5.1 remains bundled locally with its MIT license. There is no frontend build step or runtime CDN dependency. See the design brief and implementation plan for the scope and remaining quality limitations.
+</details>
