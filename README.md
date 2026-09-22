@@ -84,14 +84,14 @@ For real-model evaluation, select a specific tool-capable `:free` model in `.env
 
 Use `--attempts 3` for repeated trials when provider availability permits. This controls evaluation repetitions, not agent tool calls. Runs, failures and snapshots are stored in PostgreSQL; exports go to `reports/local/`. Interrupted runs remain visible. A hard process termination can leave a `running` record, which must not be counted as a completed attempt.
 
-A reference-valid report has no automatic semantic-quality score. Review numerical consistency, citation support, missing data, conflicting sources and causal restraint using the rubric in `docs/evaluation-review.json`. Fill each reason and verdict after reading the actual report and source snapshots.
+Real-model evaluation is automated by default. It records completion, provider failures, tool traces, retrieved evidence and structural citation checks, but it does not assign a semantic-quality score. The optional `review` command can store a five-criterion human or assistant review for selected reports; using it is not required to complete the automated evaluation.
 
 ```powershell
 .\.venv\Scripts\signalwatch-db.exe review RUN_ID CASE_ID semantic PATH_TO_COMPLETED_REVIEW.json
 .\.venv\Scripts\signalwatch-db.exe export RUN_ID
 ```
 
-The exported comparison reports raw counts, per-case outcomes, timing and pending reviews. Simulated-response tests check software behaviour only. Results and limitations are recorded in [`docs/validation.md`](docs/validation.md). The checked-in `docs/evaluation-review.json` is an evidence-based assistant review for case `r06`; it is an example of the required five-criterion shape, not independent human validation.
+The exported comparison reports raw counts, per-case outcomes, timing and any optional reviews. Simulated-response tests check software behaviour only. Results and limitations are recorded in [`docs/validation.md`](docs/validation.md). The checked-in `docs/evaluation-review.json` is an evidence-based assistant review for case `r06`; it is an example of the optional five-criterion shape, not independent human validation.
 
 ## Offline verification
 

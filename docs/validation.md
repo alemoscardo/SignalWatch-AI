@@ -49,13 +49,13 @@ The five completed reports were inspected against the fixture expectations:
 - `r05` correctly says constant rpm does not establish constant mechanical load, although some proposed causes and missing-data claims extend beyond the cited passages.
 - `r06` reports the temperature values and keeps cooling as a hypothesis, but it incorrectly says speed measurements are absent after retrieving only temperature. It also cites a suggested-checks passage for a threshold statement that the passage does not contain.
 
-The checked-in [review payload](evaluation-review.json) records an assistant review for `r06`: numeric consistency and causal restraint pass, citation support and missing-data handling fail, and conflict review is not applicable. This is evidence-based software review, not independent human validation.
+The checked-in [review payload](evaluation-review.json) records an optional assistant review for `r06`: numeric consistency and causal restraint pass, citation support and missing-data handling fail, and conflict review is not applicable. This is evidence-based software review, not independent human validation or a required evaluation gate.
 
 The complete [run report](evaluation-results/evaluation-4.md) records completion and failure counts. Rate-limited cases include conflicting-guidance, hostile-input and unrelated-question trials, so those cases were not validated by the live run.
 
 ## Remaining limitations
 
-- Full repeatable model-quality acceptance is not established. Only five complete real-model outputs are available, semantic errors were observed, and independent human review is still pending for the remaining reports.
+- Automated real-model evaluation is available, but it does not establish semantic-quality acceptance. Run 4 produced five complete outputs and exposed semantic errors; the later run 5 completed 12/12 attempts but received no semantic-quality score. Neither run supports an accuracy or physical-diagnosis claim.
 - The held-out retrieval set is small and synthetic. It is a regression check, not evidence of industrial reliability.
 - Structural citation validation checks that references were retrieved. It does not determine whether each free-form claim is semantically supported.
 - The current Windows environment needs a reproducible fix or documented workaround for the PyTorch DLL block before the full checkout can be called green.

@@ -20,7 +20,7 @@ Thresholds and tool validation are deterministic Python. Document text and addit
 
 ## Evaluation and limits
 
-The repository contains 40 labelled retrieval cases and 12 real-model investigation cases. Commands store runs, errors and snapshots in PostgreSQL and export JSON/Markdown. Human review can be recorded with five explicit criteria. Unreviewed reports have no semantic-quality score. Offline tests use simulated generation responses and do not measure real-model quality.
+The repository contains 40 labelled retrieval cases and 12 real-model investigation cases. Commands store runs, errors and snapshots in PostgreSQL and export JSON/Markdown. Automated real-model evaluation reports completion, failures, tool traces, retrieved evidence and structural citation checks; it does not assign semantic-quality scores. Optional human or assistant reviews can be recorded with five explicit criteria. Offline tests use simulated generation responses and do not measure real-model quality.
 
 See [validation results](validation.md) for actual retrieval counts, provider failures and observed model errors. The initial held-out set shares some concepts with development cases and is small; it is a regression check, not proof of generalization. Real-model adversarial coverage remains incomplete because the provider rate-limited those attempts. No reliability claim is made from structural citation success.
 
