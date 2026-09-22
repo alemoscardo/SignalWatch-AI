@@ -98,6 +98,39 @@ class StorageAndWebTests(unittest.TestCase):
             with self.client.get(path) as response:
                 self.assertEqual(response.status_code, 200)
 
+    def test_openrouter_session_configuration_is_temporary_and_key_is_not_returned(self):
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": ""}):
+            app = create_app(self.path)
+            client = app.test_client()
+            response = client.post(
+                "/api/provider/session",
+                json={"api_key": "temporary-secret", "model": "openai/gpt-4o"},
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.json["configured"])
+            self.assertEqual(response.json["model"], "openai/gpt-4o")
+            self.assertNotIn("temporary-secret", response.get_data(as_text=True))
+            forgotten = client.delete("/api/provider/session")
+            self.assertEqual(forgotten.status_code, 200)
+            self.assertFalse(forgotten.json["configured"])
+
+        with patch.dict(
+            os.environ,
+            {
+                "OPENROUTER_API_KEY": "environment-secret",
+                "OPENROUTER_MODEL": "environment/model",
+            },
+        ):
+            app = create_app(self.path)
+            client = app.test_client()
+            client.post(
+                "/api/provider/session",
+                json={"api_key": "temporary-secret", "model": "openai/gpt-4o"},
+            )
+            forgotten = client.delete("/api/provider/session")
+            self.assertTrue(forgotten.json["configured"])
+            self.assertEqual(forgotten.json["model"], "environment/model")
+
 
 if __name__ == "__main__":
     unittest.main()

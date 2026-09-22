@@ -18,6 +18,7 @@ from .telemetry import SENSORS, read_measurements, dataset_range
 # Keep a provider request below model context limits. A large interval is
 # rejected explicitly so the model can retry with a narrower interval.
 MAX_MEASUREMENT_RESULT_BYTES = 100_000
+DEFAULT_OPENROUTER_MODEL = "openrouter/free"
 
 
 def tool(name, description, properties):
@@ -78,21 +79,24 @@ A threshold exceedance alone does not determine severity, a cause or a risk leve
 """
 
 
-def complete(messages):
-    key = os.getenv("OPENROUTER_API_KEY", "").strip()
-    model = os.getenv("OPENROUTER_MODEL", "openrouter/free").strip()
+def complete(messages, *, api_key=None, model=None):
+    key = os.getenv("OPENROUTER_API_KEY", "") if api_key is None else api_key
+    model = (
+        os.getenv("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL)
+        if model is None
+        else model
+    )
+    key = key.strip() if isinstance(key, str) else ""
+    model = model.strip() if isinstance(model, str) else ""
     if not key:
-        raise ValueError("Set OPENROUTER_API_KEY in .env and restart the app.")
-    if model != "openrouter/free" and not model.endswith(":free"):
-        raise ValueError("This demo only accepts openrouter/free or :free models.")
+        raise ValueError("Configure an OpenRouter API key for this session.")
+    if not model:
+        raise ValueError("Choose an OpenRouter model.")
     payload = {
         "model": model,
         "messages": messages,
         "tools": TOOLS,
-        "provider": {
-            "require_parameters": True,
-            "max_price": {"prompt": 0, "completion": 0},
-        },
+        "provider": {"require_parameters": True},
     }
     req = Request(
         "https://openrouter.ai/api/v1/chat/completions",

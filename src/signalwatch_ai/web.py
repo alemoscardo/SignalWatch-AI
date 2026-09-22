@@ -23,7 +23,7 @@ from .telemetry import (
     read_measurements,
     dataset_range,
 )
-from .agent import investigate, investigation_events
+from .agent import DEFAULT_OPENROUTER_MODEL, complete, investigate, investigation_events
 from . import history
 from .presentation import render_report
 
@@ -41,6 +41,46 @@ def create_app(database=None) -> Flask:
     database = database or os.getenv("DATABASE_URL")
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 16384
+    # A dictionary temporarily overrides the process environment for this app.
+    app.config["OPENROUTER_SESSION"] = None
+
+    def provider_config():
+        override = app.config["OPENROUTER_SESSION"]
+        if isinstance(override, dict):
+            return override
+        key = os.getenv("OPENROUTER_API_KEY", "").strip()
+        if not key:
+            return None
+        model = os.getenv("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL).strip()
+        return {"api_key": key, "model": model or DEFAULT_OPENROUTER_MODEL}
+
+    def provider_status():
+        config = provider_config()
+        return {
+            "provider": "OpenRouter",
+            "configured": config is not None,
+            "model": config["model"] if config else os.getenv(
+                "OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL
+            ).strip()
+            or DEFAULT_OPENROUTER_MODEL,
+        }
+
+    def provider_completion():
+        config = provider_config()
+        if config is None:
+            # Pass an explicit empty key so a missing provider fails clearly.
+            return lambda messages: complete(
+                messages, api_key="", model=DEFAULT_OPENROUTER_MODEL
+            )
+        return lambda messages: complete(
+            messages, api_key=config["api_key"], model=config["model"]
+        )
+
+    def allowed_origin():
+        return request.headers.get("Origin") in (
+            None,
+            request.host_url.rstrip("/"),
+        )
 
     def validate_scenario(scenario):
         if not isinstance(scenario, str) or scenario not in SCENARIOS:
@@ -60,11 +100,44 @@ def create_app(database=None) -> Flask:
     def setup_error(error):
         return jsonify(error=str(error)), 503
 
+    @app.post("/api/provider/session")
+    def configure_provider():
+        if not allowed_origin():
+            return jsonify(error="Origin not allowed."), 403
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or set(body) - {"api_key", "model"}:
+            return jsonify(error="Invalid provider configuration."), 400
+        api_key = body.get("api_key")
+        model = body.get("model", DEFAULT_OPENROUTER_MODEL)
+        if not isinstance(api_key, str) or not api_key.strip():
+            return jsonify(error="Enter an OpenRouter API key."), 400
+        if not isinstance(model, str) or not model.strip():
+            return jsonify(error="Enter an OpenRouter model identifier."), 400
+        if len(api_key) > 4096 or len(model.strip()) > 200:
+            return jsonify(error="The provider configuration is too long."), 400
+        app.config["OPENROUTER_SESSION"] = {
+            "api_key": api_key.strip(),
+            "model": model.strip(),
+        }
+        response = jsonify(provider_status())
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.delete("/api/provider/session")
+    def forget_provider():
+        if not allowed_origin():
+            return jsonify(error="Origin not allowed."), 403
+        app.config["OPENROUTER_SESSION"] = None
+        response = jsonify(provider_status())
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.get("/")
     def index():
         scenario = "timeline"
         validate_scenario(scenario)
         temperature = read_measurements(database, "temperature", scenario=scenario)
+        provider = provider_status()
         return render_template(
             "index.html",
             readings=temperature,
@@ -75,12 +148,12 @@ def create_app(database=None) -> Flask:
             threshold=TEMPERATURE_LIMIT,
             documents=document_sections(database),
             knowledge=knowledge_status(database),
-            ai_ready=bool(os.getenv("OPENROUTER_API_KEY", "").strip()),
+            provider=provider,
         )
 
     @app.post("/api/investigate")
     def investigation():
-        if request.headers.get("Origin") not in (None, request.host_url.rstrip("/")):
+        if not allowed_origin():
             return jsonify(error="Origin not allowed."), 403
         body = request.get_json(silent=True)
         if not isinstance(body, dict) or not isinstance(body.get("context", ""), str):
@@ -100,6 +173,7 @@ def create_app(database=None) -> Flask:
             return jsonify(error="Alert not found."), 404
         context = body.get("context", "")
         retrieval_mode = configured_retrieval_mode()
+        completion = provider_completion()
 
         def finish(result):
             try:
@@ -122,6 +196,7 @@ def create_app(database=None) -> Flask:
                         database,
                         alert,
                         context,
+                        completion=completion,
                         scenario=scenario,
                         mode=retrieval_mode,
                     ):
@@ -150,6 +225,7 @@ def create_app(database=None) -> Flask:
                 database,
                 alert,
                 context,
+                completion=completion,
                 scenario=scenario,
                 mode=retrieval_mode,
             )

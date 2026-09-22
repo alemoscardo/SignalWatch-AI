@@ -40,7 +40,7 @@
           <div class="investigation-toolbar">
             <h2>Temperature alert</h2>
             <button id="close-investigation" type="button" aria-label="Close alert details">Close</button>
-            <button id="investigate" class="primary" {% if not ai_ready or not knowledge.ready %}disabled{% endif %}>Investigate <span>↗</span></button>
+            <button id="investigate" class="primary" {% if not knowledge.ready %}disabled{% endif %}>Investigate <span>→</span></button>
           </div>
           <p id="selection" class="muted">Select an alert to investigate.</p>
           <details class="additional">
@@ -49,9 +49,12 @@
             <textarea id="context" rows="4" placeholder="Review the last two hours and compare temperature with motor speed."></textarea>
             <p class="input-note">Sent to the model with the alert.</p>
           </details>
-          <p id="ai-status" class="muted input-note" role="status">
-            {% if ai_ready %}OpenRouter · free models{% else %}AI not connected · add your key to .env and restart{% endif %}
-          </p>
+          <div class="ai-status-row">
+            <p id="ai-status" class="muted input-note" role="status">
+              {% if provider.configured %}OpenRouter · {{ provider.model }} · session ready{% else %}AI not connected · add an OpenRouter key for this session{% endif %}
+            </p>
+            <button id="provider-settings" class="text-button" type="button">{% if provider.configured %}Session settings{% else %}Connect OpenRouter{% endif %}</button>
+          </div>
           <div id="report" class="report-content"></div>
           <details id="trace-panel" hidden>
             <summary>Technical details · evidence and calls</summary>
@@ -75,8 +78,40 @@
         <div id="results" class="document-grid"></div>
       </details>
     </main>
+    <dialog id="provider-dialog" aria-labelledby="provider-dialog-title" aria-describedby="provider-dialog-copy">
+      <form id="provider-form" class="provider-dialog__panel">
+        <button id="provider-close" class="dialog-close" type="button" aria-label="Close provider setup">×</button>
+        <div class="provider-dialog__lead">
+          <p class="provider-kicker"><img src="{{ url_for('static', filename='logo.png') }}" width="24" height="24" alt=""> OpenRouter <span>session connection</span></p>
+          <h2 id="provider-dialog-title">Bring your own model.</h2>
+          <p id="provider-dialog-copy">Choose any OpenRouter model with tool calling. The key stays in this app process and disappears when the app restarts.</p>
+        </div>
+        <div class="provider-dialog__fields">
+          <label class="provider-field" for="provider-model">
+            <span>Model identifier</span>
+            <input id="provider-model" name="model" type="text" value="{{ provider.model }}" autocomplete="off" spellcheck="false" placeholder="openai/gpt-4o">
+          </label>
+          <label class="provider-field" for="provider-key">
+            <span>OpenRouter API key</span>
+            <input id="provider-key" name="api_key" type="password" autocomplete="new-password" spellcheck="false" placeholder="sk-or-v1-…" required>
+          </label>
+        </div>
+        <p class="provider-dialog__note">
+          Free and paid tool-capable models are accepted. The key stays in this app process only and is not rendered back into the page.
+          <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">Get a key from OpenRouter <span aria-hidden="true">→</span></a>
+        </p>
+        <p id="provider-dialog-error" class="provider-dialog__error" role="alert"></p>
+        <div class="provider-dialog__actions">
+          <button id="forget-provider" class="text-button" type="button" hidden>Forget session key</button>
+          <div>
+            <button id="provider-cancel" type="button">Cancel</button>
+            <button id="provider-submit" class="primary" type="submit">Use for this session <span>→</span></button>
+          </div>
+        </div>
+      </form>
+    </dialog>
     <script id="demo-data" type="application/json">
-      {{ {'documents': documents, 'scenario': scenario, 'temperature': readings, 'speed': speed, 'alerts': alerts, 'threshold': threshold} | tojson }}
+      {{ {'documents': documents, 'scenario': scenario, 'temperature': readings, 'speed': speed, 'alerts': alerts, 'threshold': threshold, 'provider': provider} | tojson }}
     </script>
   </body>
 </html>

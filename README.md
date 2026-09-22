@@ -24,7 +24,7 @@ The report separates:
 | Retrieval | `all-MiniLM-L6-v2` embeddings, exact cosine search with pgvector, 15 curated documents and 26 passages |
 | Agent tools | `read_measurements` and `search_documents`, both read-only and parameterized |
 | Storage | PostgreSQL with evidence snapshots for saved reports |
-| Model | A tool-capable free OpenRouter model, configured locally |
+| Model | Any tool-capable OpenRouter model, configured locally or for the current browser session |
 
 The model cannot run SQL, shell commands or equipment controls. Data is synthetic. Keep the repository private and use suitable public data only if you extend it.
 
@@ -45,9 +45,9 @@ Edit `.env` and set:
 
 - `SIGNALWATCH_DB_PASSWORD`;
 - the same password in `DATABASE_URL`;
-- `OPENROUTER_API_KEY`, or a specific tool-capable model ending in `:free`.
+- `OPENROUTER_API_KEY` and any OpenRouter model that supports the required tool calls. You can also enter a key and model in the browser for the current app session.
 
-Keep `.env` private. Credentials stay on the server, and existing environment variables take precedence.
+Keep `.env` private. Credentials stay on the server. A key entered in the browser temporarily overrides the environment fallback and disappears when the app restarts. Forgetting it returns to the environment fallback, if one is configured.
 
 For a fresh demo, run:
 
@@ -93,7 +93,7 @@ Retrieval evaluation uses the local encoder and PostgreSQL without calling a gen
 .\.venv\Scripts\signalwatch-db.exe evaluate retrieval --split held_out
 ```
 
-For live report evaluation, select one specific tool-capable `:free` model in `.env`:
+For live report evaluation, select one specific tool-capable OpenRouter model in `.env`:
 
 ```powershell
 .\.venv\Scripts\signalwatch-db.exe evaluate reports --mode semantic --live

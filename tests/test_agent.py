@@ -75,15 +75,21 @@ class AgentTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 execute_tool(self.path, name, args)
 
-    def test_key_and_paid_model_rejected_before_network(self):
+    def test_missing_key_rejected_and_paid_model_reaches_openrouter(self):
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": ""}):
             with self.assertRaises(ValueError):
                 complete([])
         with patch.dict(
             os.environ, {"OPENROUTER_API_KEY": "test", "OPENROUTER_MODEL": "paid-model"}
-        ):
-            with self.assertRaises(ValueError):
+        ), patch(
+            "signalwatch_ai.agent.urlopen",
+            side_effect=HTTPError("url", 429, "rate limit", {}, None),
+        ) as send:
+            with self.assertRaisesRegex(RuntimeError, "OpenRouter rate limit"):
                 complete([])
+        request = send.call_args.args[0]
+        self.assertIn('"model": "paid-model"', request.data.decode())
+        self.assertNotIn("max_price", request.data.decode())
 
     def test_api_error_does_not_expose_credentials(self):
         with (

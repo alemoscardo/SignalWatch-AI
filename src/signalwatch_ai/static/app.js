@@ -4,6 +4,9 @@ let highlighted = null;
 let reportScenario = data.scenario;
 let investigating = false;
 let selected = null;
+let providerConfigured = Boolean(data.provider?.configured);
+let providerModel = data.provider?.model || "openrouter/free";
+let continueAfterProviderSave = false;
 const sensors = {
   temperature: { label: "Temperature", unit: "°C" },
   speed: { label: "Speed", unit: "rpm" },
@@ -46,7 +49,16 @@ const status = document.querySelector("#ai-status");
 const trace = document.querySelector("#trace");
 const tracePanel = document.querySelector("#trace-panel");
 const ready = !investigateButton.disabled;
-const idleStatus = status.textContent;
+const providerSettings = document.querySelector("#provider-settings");
+const providerDialog = document.querySelector("#provider-dialog");
+const providerForm = document.querySelector("#provider-form");
+const providerClose = document.querySelector("#provider-close");
+const providerCancel = document.querySelector("#provider-cancel");
+const providerForget = document.querySelector("#forget-provider");
+const providerSubmit = document.querySelector("#provider-submit");
+const providerKey = document.querySelector("#provider-key");
+const providerModelInput = document.querySelector("#provider-model");
+const providerDialogError = document.querySelector("#provider-dialog-error");
 const historyList = document.querySelector("#history-list");
 const historyStatus = document.querySelector("#history-status");
 const chartSelection = document.querySelector("#chart-selection");
@@ -56,13 +68,26 @@ const query = document.querySelector("#query");
 const searchStatus = document.querySelector("#search-status");
 const results = document.querySelector("#results");
 
+function updateProviderStatus(message = null) {
+  if (message) {
+    status.textContent = message;
+    return;
+  }
+  status.textContent = providerConfigured
+    ? `OpenRouter · ${providerModel} · session ready`
+    : "AI not connected · add an OpenRouter key for this session";
+  providerSettings.textContent = providerConfigured
+    ? "Session settings"
+    : "Connect OpenRouter";
+}
+
 function clearInvestigation() {
   highlighted = null;
   report.replaceChildren();
   trace.replaceChildren();
   tracePanel.hidden = true;
   tracePanel.open = false;
-  status.textContent = idleStatus;
+  updateProviderStatus();
 }
 
 function setInvestigating(active) {
@@ -73,6 +98,7 @@ function setInvestigating(active) {
     .forEach((button) => (button.disabled = active));
   report.setAttribute("aria-busy", String(active));
   closeInvestigation.disabled = active;
+  providerSettings.disabled = active;
   chartAlerts
     .querySelectorAll("button")
     .forEach((button) => (button.disabled = active));
@@ -342,6 +368,95 @@ async function loadHistory() {
   }
 }
 
+function closeProviderDialog() {
+  providerDialog.close();
+  providerKey.value = "";
+  providerDialogError.textContent = "";
+  continueAfterProviderSave = false;
+}
+
+function openProviderDialog({ continueInvestigation = false } = {}) {
+  if (investigating) return;
+  continueAfterProviderSave = continueInvestigation;
+  providerDialogError.textContent = "";
+  providerKey.value = "";
+  providerModelInput.value = providerModel;
+  providerForget.hidden = !providerConfigured;
+  providerDialog.showModal();
+  providerKey.focus();
+}
+
+async function forgetProviderSession() {
+  providerForget.disabled = true;
+  try {
+    const response = await fetch("/api/provider/session", {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+    });
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(result.error || "Could not forget the session key.");
+    providerConfigured = Boolean(result.configured);
+    providerModel = result.model || providerModel;
+    closeProviderDialog();
+    updateProviderStatus();
+  } catch (error) {
+    providerDialogError.textContent = error.message;
+  } finally {
+    providerForget.disabled = false;
+  }
+}
+
+async function saveProviderSession(event) {
+  event.preventDefault();
+  const apiKey = providerKey.value.trim();
+  const model = providerModelInput.value.trim();
+  if (!apiKey || !model) {
+    providerDialogError.textContent = "Enter both an API key and a model identifier.";
+    return;
+  }
+  providerSubmit.disabled = true;
+  providerCancel.disabled = true;
+  providerForget.disabled = true;
+  providerDialogError.textContent = "";
+  try {
+    const response = await fetch("/api/provider/session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ api_key: apiKey, model }),
+    });
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(result.error || "Could not configure OpenRouter.");
+    providerConfigured = Boolean(result.configured);
+    providerModel = result.model || model;
+    const shouldContinue = continueAfterProviderSave;
+    closeProviderDialog();
+    updateProviderStatus();
+    if (shouldContinue) await runInvestigation();
+  } catch (error) {
+    providerDialogError.textContent = error.message;
+  } finally {
+    providerSubmit.disabled = false;
+    providerCancel.disabled = false;
+    providerForget.disabled = false;
+  }
+}
+
+providerSettings.addEventListener("click", () => openProviderDialog());
+providerClose.addEventListener("click", closeProviderDialog);
+providerCancel.addEventListener("click", closeProviderDialog);
+providerForget.addEventListener("click", forgetProviderSession);
+providerForm.addEventListener("submit", saveProviderSession);
+providerDialog.addEventListener("close", () => {
+  providerKey.value = "";
+  providerDialogError.textContent = "";
+  continueAfterProviderSave = false;
+});
+
 search.addEventListener("submit", async (event) => {
   event.preventDefault();
   searchButton.disabled = true;
@@ -383,7 +498,7 @@ chart.on("plotly_click", (event) => {
 });
 loadHistory();
 
-investigateButton.addEventListener("click", async () => {
+async function runInvestigation() {
   if (selected === null || investigating) return;
   clearInvestigation();
   drawChart();
@@ -451,6 +566,14 @@ investigateButton.addEventListener("click", async () => {
   } finally {
     setInvestigating(false);
   }
+}
+investigateButton.addEventListener("click", () => {
+  if (selected === null || investigating) return;
+  if (!providerConfigured) {
+    openProviderDialog({ continueInvestigation: true });
+    return;
+  }
+  runInvestigation();
 });
 // Follow report citations to the exact evidence snapshot, including collapsed sources.
 report.addEventListener("click", (event) => {

@@ -10,7 +10,12 @@ import psycopg
 from psycopg.types.json import Jsonb
 from .database import connect, MAINTENANCE_LOCK
 from .knowledge import MODES, search_documents, status, MIN_SIMILARITY
-from .agent import investigation_events, SYSTEM, TOOLS
+from .agent import (
+    DEFAULT_OPENROUTER_MODEL,
+    investigation_events,
+    SYSTEM,
+    TOOLS,
+)
 from . import knowledge
 from itertools import product
 from datetime import datetime, timezone
@@ -42,13 +47,7 @@ def run(
         raise ValueError(
             "Real-model evaluation requires --live and OPENROUTER_API_KEY. No simulated quality scores are produced."
         )
-    model = os.getenv("OPENROUTER_MODEL", "openrouter/free")
-    if kind == "reports" and (
-        model == "openrouter/free" or not model.endswith(":free")
-    ):
-        raise ValueError(
-            "Choose a specific tool-capable :free model for a comparable real-model evaluation."
-        )
+    model = os.getenv("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL)
     state = status(database)
     if not state["ready"]:
         raise RuntimeError(state["message"])

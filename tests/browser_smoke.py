@@ -283,7 +283,17 @@ class BrowserTests(unittest.TestCase):
                 "document.querySelector('#chart').data?.length === 3"
             )
             self.choose_alert(0)
-            expect(page.locator("#investigate")).to_be_disabled()
+            expect(page.locator("#investigate")).to_be_enabled()
+            page.locator("#investigate").click()
+            expect(page.locator("#provider-dialog")).to_be_visible()
+            expected_model = (
+                os.getenv("OPENROUTER_MODEL", "openrouter/free").strip()
+                or "openrouter/free"
+            )
+            expect(page.locator("#provider-model")).to_have_value(expected_model)
+            expect(page.locator("#provider-key")).to_be_visible()
+            page.locator("#provider-cancel").click()
+            expect(page.locator("#provider-dialog")).to_be_hidden()
         page.locator(".sources > summary").click()
         page.locator("#query").fill("cooling")
         page.locator("#search button").click()
@@ -298,6 +308,18 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual(
             page.evaluate("document.querySelector('#chart').data[1].x.length"), 0
         )
+        self.assertEqual(self.errors, [])
+
+    def test_session_settings_do_not_start_investigation(self):
+        page = self.page
+        self.choose_alert(0)
+        page.locator("#provider-settings").click()
+        page.locator("#provider-model").fill("openai/gpt-4o")
+        page.locator("#provider-key").fill("temporary-test-key")
+        page.locator("#provider-submit").click()
+        expect(page.locator("#provider-dialog")).to_be_hidden()
+        expect(page.locator("#ai-status")).to_contain_text("openai/gpt-4o")
+        self.assertEqual(self.pending, [])
         self.assertEqual(self.errors, [])
 
 

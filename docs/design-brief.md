@@ -16,7 +16,7 @@ The browser keeps the existing graph, citations, streaming progress and saved hi
 
 The model must successfully attempt both evidence tools and cite each available source category. A successful empty search permits an explicitly labelled insufficient-evidence report. Errors are distinct from no evidence. One guided citation correction remains available. The status `supported` means retrieved references passed structural checks; it does not certify semantic support or physical causation.
 
-Thresholds and tool validation are deterministic Python. Document text and additional user context are untrusted evidence. Reports distinguish observations, hypotheses, missing data and suggested checks. OpenRouter is restricted to free model identifiers and zero provider prices, without paid fallback. Encoding and retrieval are local; report generation uses the network.
+Thresholds and tool validation are deterministic Python. Document text and additional user context are untrusted evidence. Reports distinguish observations, hypotheses, missing data and suggested checks. OpenRouter accepts any model that supports the required tool calls. The browser can hold a key temporarily in the local app process; it does not persist that key. Encoding and retrieval are local; report generation uses the network.
 
 ## Evaluation and limits
 
@@ -28,4 +28,4 @@ See [validation results](validation.md) for actual retrieval counts, provider fa
 
 Use only synthetic or suitable public data. Keep the repository private and the original C# repository unchanged. The supported input is curated English Markdown. PDF/OCR ingestion, multi-user deployment, cloud services, equipment control and multi-agent orchestration remain outside scope.
 
-The approved implementation direction and its remaining evaluation limits are recorded in this design brief.
+The approved implementation direction and its remaining evaluation limits are recorded in this design brief. Its operational features and automated real-model evaluation are implemented; semantic quality remains outside automatic acceptance unless an optional review is performed, as documented in validation.md.
