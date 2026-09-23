@@ -1,9 +1,7 @@
-"""Optional real-browser checks with local data and simulated API responses."""
+"""Optional real-browser checks with local data and simulated agent events."""
 
-from contextlib import closing
 import json
 import os
-from signalwatch_ai.database import connect
 from threading import Event, Thread
 import unittest
 from unittest.mock import patch
@@ -12,10 +10,8 @@ from playwright.sync_api import expect, sync_playwright
 from werkzeug.serving import make_server
 
 from helpers import demo_database
-from signalwatch_ai.agent import execute_tool
-from signalwatch_ai import history
+from signalwatch_ai import chat_store, history
 from signalwatch_ai.telemetry import detect_alerts, read_measurements
-from signalwatch_ai.presentation import render_report
 from signalwatch_ai.web import create_app
 
 
@@ -24,14 +20,6 @@ class BrowserTests(unittest.TestCase):
         self.path = demo_database(self)
         self.enterContext(
             patch.dict(os.environ, {"OPENROUTER_API_KEY": "offline-test"})
-        )
-        self.enterContext(
-            patch(
-                "signalwatch_ai.agent.urlopen",
-                side_effect=AssertionError(
-                    "Model network calls forbidden in browser tests"
-                ),
-            )
         )
         server = make_server("127.0.0.1", 0, create_app(self.path), threaded=True)
         thread = Thread(target=server.serve_forever, daemon=True)
@@ -47,175 +35,242 @@ class BrowserTests(unittest.TestCase):
         self.page = browser.new_page(viewport={"width": 1280, "height": 900})
         self.errors = []
         self.page.on("pageerror", lambda error: self.errors.append(str(error)))
-        self.pending = []
-        self.page.route("**/api/investigate", lambda route: self.pending.append(route))
         self.url = f"http://127.0.0.1:{server.server_port}"
         self.page.goto(self.url)
         self.page.wait_for_function(
             "document.querySelector('#chart').data?.length === 3"
         )
-        self.timeline = self.path
         self.alerts = detect_alerts(
-            read_measurements(self.timeline, "temperature", scenario="timeline")
+            read_measurements(self.path, "temperature", scenario="timeline")
         )
 
-    def complete_report(self):
-        measurements = execute_tool(
-            self.path,
-            "read_measurements",
-            json.dumps(
-                {
-                    "sensor": "temperature",
-                    "start": "2026-09-10T08:00:00Z",
-                    "end": "2026-09-10T08:00:00Z",
-                }
-            ),
-        )
-        documents = execute_tool(
-            self.path, "search_documents", '{"query":"temperature"}'
-        )
-        trace = [
-            {"tool": "read_measurements", "result": measurements},
-            {"tool": "search_documents", "result": documents},
-        ]
-        report = f"**Observed** `{measurements[0]['citation']}`. Possible explanation {documents[0]['citation']}."
-        result = {
-            "report": report,
-            "trace": trace,
-            "model": "offline-test:free",
-            "calls": 2,
-            "tokens": 20,
-            "seconds": 0.1,
-        }
-        path = self.timeline
-        alert = detect_alerts(
-            read_measurements(path, "temperature", scenario="timeline")
-        )[0]
-        history.save(
-            self.path,
-            "timeline",
-            alert,
-            "Review previous readings",
-            result,
-        )
-        self.pending.pop().fulfill(
-            content_type="application/x-ndjson",
-            body=json.dumps(
-                {
-                    "type": "result",
-                    "result": {**result, "report_html": render_report(report, trace)},
-                }
-            )
-            + "\n",
-        )
-
-    def choose_alert(self, index):
+    def choose_chart_alert(self, index):
         page = self.page
         page.locator("#chart").scroll_into_view_if_needed()
         coords = page.evaluate(
             """index => {
-          const graph = document.querySelector('#chart');
-          const bounds = graph.getBoundingClientRect();
-          const layout = graph._fullLayout;
-          return {x: bounds.x + layout.xaxis._offset + layout.xaxis.d2p(graph.data[1].x[index]),
-                  y: bounds.y + layout.yaxis._offset + layout.yaxis.d2p(graph.data[1].y[index])};
-        }""",
+              const graph = document.querySelector('#chart');
+              const bounds = graph.getBoundingClientRect();
+              const layout = graph._fullLayout;
+              return {x: bounds.x + layout.xaxis._offset + layout.xaxis.d2p(graph.data[1].x[index]),
+                      y: bounds.y + layout.yaxis._offset + layout.yaxis.d2p(graph.data[1].y[index])};
+            }""",
             index,
         )
         page.mouse.move(coords["x"], coords["y"])
         expect(page.locator("#chart .hovertext")).to_be_visible()
         page.mouse.click(coords["x"], coords["y"])
 
-    def test_search_explains_invalid_input_and_server_failure(self):
+    def test_dataset_alert_selection_and_chart(self):
         page = self.page
-        page.locator(".sources > summary").click()
-        page.locator("#query").fill("!!!")
-        page.locator("#search button").click()
-        expect(page.locator("#search-status")).to_contain_text(
-            "meaningful search question"
+        expect(page.locator("#thread-list .thread-choice")).to_have_count(0)
+        expect(page.locator("#alert-list .alert-choice")).to_have_count(
+            len(self.alerts)
         )
-        page.route(
-            "**/api/documents?*",
-            lambda route: route.fulfill(
-                status=503,
-                content_type="application/json",
-                body=json.dumps({"error": "Knowledge base needs preparation."}),
-            ),
-        )
-        page.locator("#query").fill("cooling")
-        page.locator("#search button").click()
-        expect(page.locator("#search-status")).to_contain_text("needs preparation")
-
-    def test_chart_first_and_alert_selection(self):
-        page = self.page
-        expect(page.locator("#scenario")).to_have_count(0)
-        expect(page.locator("#alert-select")).to_have_count(0)
-        expect(page.locator(".investigation")).to_be_hidden()
-        self.assertGreater(len(self.alerts), 4)
-        self.choose_alert(1)
-        expect(page.locator(".investigation")).to_be_visible()
-        expect(page.locator("#selection")).to_contain_text(
+        expect(page.locator("#active-context")).to_contain_text("No alert selected")
+        page.locator("#alert-list .alert-choice").nth(1).click()
+        expect(page.locator("#active-context")).to_contain_text(
             self.alerts[1]["timestamp"][11:16]
         )
-        self.assertEqual(self.pending, [])
-        page.locator("#close-investigation").click()
-        expect(page.locator(".investigation")).to_be_hidden()
-        page.locator("#chart-alerts button").first.focus()
-        page.keyboard.press("Enter")
-        expect(page.locator(".investigation")).to_be_visible()
-        expect(page.locator("#selection")).to_contain_text(
-            self.alerts[0]["timestamp"][11:16]
+        expect(page.locator("#alert-list .active")).to_have_count(1)
+        page.locator("#clear-context").click()
+        expect(page.locator("#active-context")).to_contain_text("No alert selected")
+
+        page.locator("#dataset-select").select_option("spike")
+        expect(page.locator("#dataset-title")).to_contain_text("Isolated spike")
+        expect(page.locator("#alert-list .alert-choice")).to_have_count(1)
+        self.choose_chart_alert(0)
+        expect(page.locator("#active-context")).to_contain_text("spike")
+        expect(page.locator("#context-status")).to_contain_text(
+            "context applies to your next message"
         )
-        self.choose_alert(len(self.alerts) - 1)
-        expect(page.locator("#selection")).to_contain_text("2026-09-11 01:32 UTC")
         self.assertEqual(self.errors, [])
 
-    def test_loading_citations_and_history(self):
+    def test_live_tool_trace_saved_chat_and_legacy_archive(self):
         page = self.page
-        self.choose_alert(0)
-        page.locator(".additional > summary").click()
-        page.locator("#context").fill("Review previous readings")
-        page.locator("#investigate").click()
-        expect(page.locator(".loading-spinner")).to_have_count(1)
-        expect(page.locator("#close-investigation")).to_be_disabled()
-        self.choose_alert(1)
-        expect(page.locator("#selection")).to_contain_text(
-            self.alerts[0]["timestamp"][11:16]
+        alert = self.alerts[0]
+        history.save(
+            self.path,
+            "timeline",
+            alert,
+            "old report context",
+            {
+                "report": "Old investigation result.",
+                "trace": [],
+                "model": "old:model",
+                "calls": 1,
+                "tokens": 10,
+                "seconds": 0.1,
+            },
         )
-        self.assertEqual(len(self.pending), 1)
-        self.complete_report()
-        expect(page.locator("#report strong")).to_have_text("Observed")
-        expect(page.locator("#investigate")).to_be_enabled()
-        page.locator('#report a[href="#evidence-2"]').click()
-        expect(page.locator("#evidence-2 summary")).to_be_focused()
-        page.locator('button[data-sensor="speed"]').click()
-        page.locator('#report a[href="#evidence-1"]').click()
-        expect(page.locator('button[data-sensor="temperature"]')).to_have_attribute(
-            "aria-pressed", "true"
-        )
-        expect(page.locator("#chart-selection")).to_contain_text("08:00 UTC")
-        page.locator("#chart").press("ArrowRight")
-        expect(page.locator("#chart-selection")).to_contain_text("08:01 UTC")
-        self.choose_alert(1)
-        expect(page.locator("#report")).to_be_empty()
-        expect(page.locator("#trace-panel")).to_be_hidden()
         page.reload()
-        expect(page.locator(".investigation")).to_be_hidden()
+        page.wait_for_function("document.querySelector('#chart').data?.length === 3")
+        expect(page.locator("#history-list button")).to_have_count(1)
         page.locator(".history > summary").click()
         page.locator("#history-list button").click()
-        expect(page.locator("#report strong")).to_have_text("Observed")
-        expect(page.locator("#context")).to_have_value("Review previous readings")
-        expect(page.locator("#selection")).to_contain_text("2026-09-10 09:32 UTC")
-        expect(page.locator("#history-list button")).to_contain_text(
-            "2026-09-10 09:32 UTC"
+        expect(page.locator("#legacy-dialog")).to_be_visible()
+        expect(page.locator("#legacy-report")).to_contain_text(
+            "Old investigation result"
         )
-        page.locator("#close-investigation").click()
-        expect(page.locator(".investigation")).to_be_hidden()
-        expect(page.locator("#report")).to_be_empty()
-        self.assertEqual(self.pending, [])
+        page.locator("#legacy-close").click()
+        expect(page.locator("#thread-list .thread-choice")).to_have_count(0)
+
+        page.locator("#alert-list .alert-choice").first.click()
+        page.locator("#message").fill("When did this alert begin?")
+        release = Event()
+        self.addCleanup(release.set)
+
+        def events(database, thread_id, turn_id, user_message, context, **kwargs):
+            yield {"type": "request_started", "request": 1}
+            yield {
+                "type": "tool_started",
+                "tool": "list_alerts",
+                "arguments": {"dataset": context["dataset"]},
+                "call_id": "call-1",
+            }
+            if not release.wait(10):
+                raise RuntimeError("Browser test timed out")
+            saved_alert = context["alert"]
+            tool_result = {
+                **saved_alert,
+                "trace_detail": "sample evidence " * 400,
+            }
+            record = {
+                "tool": "list_alerts",
+                "arguments": {"dataset": context["dataset"]},
+                "result": [tool_result],
+                "seconds": 0.01,
+                "tool_call_id": "call-1",
+            }
+            chat_store.append_trace(database, turn_id, record)
+            answer = f"The alert began at [ref:{saved_alert['reference']}]."
+            metrics = {
+                "calls": 1,
+                "tokens": 23,
+                "models": ["offline-test"],
+                "seconds": 0.1,
+            }
+            chat_store.finish_turn(database, turn_id, answer, metrics)
+            yield {"type": "tool_finished", **record}
+            yield {"type": "text_delta", "text": answer, "provisional": True}
+            yield {
+                "type": "done",
+                "answer": answer,
+                "trace": [record],
+                "evidence": {saved_alert["reference"]: saved_alert},
+                "metrics": metrics,
+                "compactions": [],
+            }
+
+        with patch("signalwatch_ai.web.chat_turn_events", side_effect=events):
+            page.locator("#chat-form button[type=submit]").click()
+            expect(page.locator(".thinking-indicator")).to_contain_text(
+                "Checking alerts"
+            )
+            self.assertFalse(
+                page.locator(".tool-calls").evaluate("element => element.open")
+            )
+            expect(page.locator(".tool-card")).to_be_hidden()
+            expect(page.locator(".tool-calls > summary")).to_contain_text("Tool Calls")
+            page.locator(".tool-calls > summary").click()
+            expect(page.locator(".tool-card")).to_be_visible()
+            expect(page.locator(".tool-card__state")).to_have_text("Running…")
+            release.set()
+            expect(page.locator(".assistant-message")).to_contain_text(
+                "The alert began"
+            )
+            expect(page.locator(".assistant-message .chat-citation")).to_have_count(1)
+            expect(page.locator("#thread-list .thread-choice")).to_have_count(1)
+            expect(page.locator(".tool-card__output")).to_contain_text(
+                "sample evidence"
+            )
+        page.reload()
+        expect(page.locator(".assistant-message")).to_contain_text("The alert began")
+        expect(page.locator(".tool-card")).to_be_hidden()
+        page.locator(".tool-calls > summary").click()
+        steps = page.locator(".tool-calls__steps")
+        scroll = steps.evaluate(
+            "element => ({overflowY: getComputedStyle(element).overflowY, maxHeight: getComputedStyle(element).maxHeight})"
+        )
+        self.assertEqual(scroll["overflowY"], "auto")
+        self.assertNotEqual(scroll["maxHeight"], "none")
+        page.wait_for_function(
+            "element => element.scrollHeight > element.clientHeight",
+            arg=steps.element_handle(),
+            timeout=3000,
+        )
+        steps.hover(timeout=5000)
+        outer_scroll_before = page.locator("#chat-messages").evaluate(
+            "element => element.scrollTop"
+        )
+        page.mouse.wheel(0, 240)
+        page.wait_for_function(
+            "document.querySelector('.tool-calls__steps').scrollTop > 0",
+            timeout=3000,
+        )
+        outer_scroll_after = page.locator("#chat-messages").evaluate(
+            "element => element.scrollTop"
+        )
+        self.assertEqual(outer_scroll_after, outer_scroll_before)
+        expect(page.locator(".tool-card summary")).to_contain_text("list_alerts")
+        expect(page.locator("#active-context")).to_contain_text("Continuous history")
         self.assertEqual(self.errors, [])
 
-    def test_plotly_gaps_zoom_and_mobile(self):
+    def test_partial_answer_with_error_stays_formatted_with_clickable_warning(self):
+        page = self.page
+        page.locator("#message").fill("Summarize the evidence.")
+        answer = (
+            "### Corrected summary\n"
+            "The temperature reached **80.5°C** [ref:unknown]."
+        )
+        warning = "The response still contains an invalid or missing citation."
+
+        def events(database, thread_id, turn_id, user_message, context, **kwargs):
+            chat_store.fail_turn(database, turn_id, answer, warning)
+            yield {"type": "request_started", "request": 1}
+            yield {"type": "text_delta", "text": answer, "provisional": True}
+            yield {"type": "error", "message": warning, "partial": answer}
+
+        with patch("signalwatch_ai.web.chat_turn_events", side_effect=events):
+            page.locator("#chat-form button[type=submit]").click()
+            expect(page.locator(".assistant-message h3")).to_have_text(
+                "Corrected summary"
+            )
+            expect(page.locator(".assistant-message strong")).to_contain_text("80.5°C")
+            expect(page.locator(".response-warning summary")).to_have_text(
+                "Citation warning"
+            )
+            expect(page.locator(".chat-notice--error")).to_have_count(0)
+            page.locator(".response-warning summary").click()
+            expect(page.locator(".response-warning p")).to_contain_text(warning)
+
+        page.reload()
+        expect(page.locator(".assistant-message h3")).to_have_text("Corrected summary")
+        expect(page.locator(".response-warning summary")).to_have_text(
+            "Citation warning"
+        )
+        self.assertEqual(self.errors, [])
+
+    def test_provider_setup_does_not_send_or_create_a_turn(self):
+        page = self.page
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": ""}):
+            page.reload()
+            page.wait_for_function(
+                "document.querySelector('#chart').data?.length === 3"
+            )
+            page.locator("#message").fill("Please inspect this alert")
+            page.locator("#chat-form button[type=submit]").click()
+            expect(page.locator("#provider-dialog")).to_be_visible()
+            page.locator("#provider-model").fill("openai/gpt-4o")
+            page.locator("#provider-key").fill("temporary-test-key")
+            page.locator("#provider-submit").click()
+            expect(page.locator("#provider-dialog")).to_be_hidden()
+            expect(page.locator("#ai-status")).to_contain_text("openai/gpt-4o")
+            expect(page.locator("#thread-list .thread-choice")).to_have_count(0)
+            expect(page.locator("#message")).to_have_value("Please inspect this alert")
+        self.assertEqual(self.errors, [])
+
+    def test_plotly_gaps_zoom_and_mobile_layout(self):
         page = self.page
         self.assertEqual(page.evaluate("Plotly.version"), "3.5.1")
         self.assertEqual(
@@ -223,9 +278,6 @@ class BrowserTests(unittest.TestCase):
                 "document.querySelector('#chart').data[0].y.filter(value => value === null).length"
             ),
             1,
-        )
-        self.assertEqual(
-            page.evaluate("document.querySelector('#chart').layout.dragmode"), "pan"
         )
         page.locator('#chart [data-title="Zoom"]').click()
         page.evaluate(
@@ -247,79 +299,6 @@ class BrowserTests(unittest.TestCase):
         page.wait_for_function(
             "document.documentElement.scrollWidth <= window.innerWidth"
         )
-        self.choose_alert(0)
-        expect(page.locator("#investigate")).to_be_visible()
-        self.assertEqual(self.errors, [])
-
-    def test_live_progress_stream_and_error(self):
-        self.choose_alert(0)
-        release = Event()
-        self.addCleanup(release.set)
-
-        def events(*args, **kwargs):
-            yield {"type": "progress", "message": "Searching documents…"}
-            if not release.wait(10):
-                raise RuntimeError("Test timed out")
-            raise RuntimeError("Offline provider failure")
-
-        self.page.unroute("**/api/investigate")
-        with patch("signalwatch_ai.web.investigation_events", side_effect=events):
-            self.page.locator("#investigate").click()
-            expect(self.page.locator("#progress-message")).to_have_text(
-                "Searching documents…"
-            )
-            release.set()
-            expect(self.page.locator("#ai-status")).to_have_text(
-                "Offline provider failure"
-            )
-            expect(self.page.locator("#investigate")).to_be_enabled()
-        self.assertEqual(self.errors, [])
-
-    def test_no_credentials_empty_dataset_and_document_search(self):
-        page = self.page
-        with patch.dict(os.environ, {"OPENROUTER_API_KEY": ""}):
-            page.reload()
-            page.wait_for_function(
-                "document.querySelector('#chart').data?.length === 3"
-            )
-            self.choose_alert(0)
-            expect(page.locator("#investigate")).to_be_enabled()
-            page.locator("#investigate").click()
-            expect(page.locator("#provider-dialog")).to_be_visible()
-            expected_model = (
-                os.getenv("OPENROUTER_MODEL", "openrouter/free").strip()
-                or "openrouter/free"
-            )
-            expect(page.locator("#provider-model")).to_have_value(expected_model)
-            expect(page.locator("#provider-key")).to_be_visible()
-            page.locator("#provider-cancel").click()
-            expect(page.locator("#provider-dialog")).to_be_hidden()
-        page.locator(".sources > summary").click()
-        page.locator("#query").fill("cooling")
-        page.locator("#search button").click()
-        expect(page.locator("#search-status")).to_contain_text("sections found")
-        with connect(self.timeline) as connection:
-            connection.execute(
-                "UPDATE measurements SET value = 64 WHERE dataset='timeline' AND sensor = 'temperature'"
-            )
-        page.reload()
-        page.wait_for_function("document.querySelector('#chart').data?.length === 3")
-        expect(page.locator(".investigation")).to_be_hidden()
-        self.assertEqual(
-            page.evaluate("document.querySelector('#chart').data[1].x.length"), 0
-        )
-        self.assertEqual(self.errors, [])
-
-    def test_session_settings_do_not_start_investigation(self):
-        page = self.page
-        self.choose_alert(0)
-        page.locator("#provider-settings").click()
-        page.locator("#provider-model").fill("openai/gpt-4o")
-        page.locator("#provider-key").fill("temporary-test-key")
-        page.locator("#provider-submit").click()
-        expect(page.locator("#provider-dialog")).to_be_hidden()
-        expect(page.locator("#ai-status")).to_contain_text("openai/gpt-4o")
-        self.assertEqual(self.pending, [])
         self.assertEqual(self.errors, [])
 
 

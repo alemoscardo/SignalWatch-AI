@@ -3,6 +3,7 @@
 import json
 import argparse
 import os
+import uuid
 import psycopg
 from pathlib import Path
 from dotenv import load_dotenv
@@ -26,6 +27,9 @@ from .telemetry import (
 from .agent import DEFAULT_OPENROUTER_MODEL, complete, investigate, investigation_events
 from . import history
 from .presentation import render_report
+from . import chat_store
+from .chat_agent import chat_turn_events
+from .chat_presentation import render_chat_message
 
 
 def configured_retrieval_mode():
@@ -59,10 +63,12 @@ def create_app(database=None) -> Flask:
         return {
             "provider": "OpenRouter",
             "configured": config is not None,
-            "model": config["model"] if config else os.getenv(
-                "OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL
-            ).strip()
-            or DEFAULT_OPENROUTER_MODEL,
+            "model": (
+                config["model"]
+                if config
+                else os.getenv("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL).strip()
+                or DEFAULT_OPENROUTER_MODEL
+            ),
         }
 
     def provider_completion():
@@ -149,6 +155,205 @@ def create_app(database=None) -> Flask:
             documents=document_sections(database),
             knowledge=knowledge_status(database),
             provider=provider,
+            datasets=chat_store.datasets(database),
+        )
+
+    @app.get("/api/datasets")
+    def available_datasets():
+        return jsonify(chat_store.datasets(database))
+
+    @app.get("/api/telemetry/<scenario>")
+    def telemetry(scenario):
+        try:
+            return jsonify(
+                chat_store.dataset_telemetry(database, validate_scenario(scenario))
+            )
+        except ValueError as error:
+            return jsonify(error=str(error)), 404
+
+    @app.get("/api/alerts")
+    def available_alerts():
+        try:
+            return jsonify(
+                chat_store.list_alerts(database, request.args.get("dataset"))
+            )
+        except ValueError as error:
+            return jsonify(error=str(error)), 400
+
+    @app.get("/api/chats")
+    def chats():
+        return jsonify(chat_store.list_threads(database))
+
+    @app.post("/api/chats")
+    def create_chat():
+        if not allowed_origin():
+            return jsonify(error="Origin not allowed."), 403
+        body = request.get_json(silent=True)
+        if body not in ({}, None):
+            return (
+                jsonify(
+                    error="New conversations do not accept client supplied history."
+                ),
+                400,
+            )
+        return jsonify(chat_store.create_thread(database)), 201
+
+    @app.get("/api/chats/<int:thread_id>")
+    def get_chat(thread_id):
+        thread = chat_store.load_thread(database, thread_id)
+        if thread is None:
+            abort(404)
+        evidence = chat_store.evidence_for_thread(database, thread_id)
+        for turn in thread["turns"]:
+            if turn["assistant_message"]:
+                turn["assistant_html"] = render_chat_message(
+                    turn["assistant_message"], evidence, turn["id"]
+                )
+            turn["partial_html"] = (
+                render_chat_message(turn["partial_message"], evidence, turn["id"])
+                if turn["partial_message"]
+                else ""
+            )
+        return jsonify(thread)
+
+    @app.patch("/api/chats/<int:thread_id>/context")
+    def update_chat_context(thread_id):
+        if not allowed_origin():
+            return jsonify(error="Origin not allowed."), 403
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or set(body) - {"dataset", "alert_id"}:
+            return jsonify(error="Invalid alert context."), 400
+        dataset = body.get("dataset")
+        alert_id = body.get("alert_id")
+        if dataset is None and alert_id is None:
+            context = None
+        elif not isinstance(dataset, str) or not isinstance(alert_id, str):
+            return (
+                jsonify(
+                    error="Select both a dataset and an alert, or clear the context."
+                ),
+                400,
+            )
+        else:
+            try:
+                validate_scenario(dataset)
+                alert = chat_store.resolve_alert(database, dataset, alert_id)
+            except ValueError:
+                alert = None
+            if alert is None:
+                return jsonify(error="Alert not found."), 404
+            context = {"dataset": dataset, "alert": alert}
+        result = chat_store.set_context(database, thread_id, context)
+        if result is None:
+            abort(404)
+        response = jsonify(result)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.post("/api/chats/<int:thread_id>/turns")
+    def chat_turn(thread_id):
+        if not allowed_origin():
+            return jsonify(error="Origin not allowed."), 403
+        body = request.get_json(silent=True)
+        if (
+            not isinstance(body, dict)
+            or set(body) != {"request_id", "message"}
+            or not isinstance(body.get("message"), str)
+            or not body["message"].strip()
+            or len(body["message"]) > 8000
+        ):
+            return jsonify(error="Enter a message of 1 to 8000 characters."), 400
+        try:
+            request_id = uuid.UUID(body["request_id"])
+        except (ValueError, TypeError, AttributeError):
+            return jsonify(error="Invalid request identifier."), 400
+        thread = chat_store.load_thread(database, thread_id)
+        if thread is None:
+            abort(404)
+        provider = provider_config()
+        if provider is None:
+            return jsonify(error="Configure an OpenRouter key for this session."), 503
+        mode = configured_retrieval_mode()
+
+        def stream():
+            turn = None
+            terminal = False
+            try:
+                try:
+                    turn = chat_store.begin_turn(
+                        database,
+                        thread_id,
+                        request_id,
+                        body["message"].strip(),
+                    )
+                except RuntimeError as error:
+                    yield json.dumps({"type": "error", "message": str(error)}) + "\n"
+                    return
+                if turn is None:
+                    yield json.dumps(
+                        {"type": "error", "message": "Conversation not found."}
+                    ) + "\n"
+                    return
+                for event in chat_turn_events(
+                    database,
+                    thread_id,
+                    turn["id"],
+                    body["message"].strip(),
+                    turn["context_snapshot"],
+                    api_key=provider["api_key"],
+                    model=provider["model"],
+                    mode=mode,
+                ):
+                    if event["type"] == "done":
+                        event["assistant_html"] = render_chat_message(
+                            event["answer"], event["evidence"], turn["id"]
+                        )
+                        event.pop("evidence", None)
+                        event.pop("trace", None)
+                        event.pop("compactions", None)
+                    elif event["type"] == "error" and isinstance(
+                        event.get("partial"), str
+                    ):
+                        partial = event.pop("partial")
+                        if partial.strip():
+                            event["partial_html"] = render_chat_message(
+                                partial,
+                                chat_store.evidence_for_thread(database, thread_id),
+                                turn["id"],
+                            )
+                    if event["type"] in ("done", "interrupted", "error"):
+                        terminal = True
+                    yield json.dumps(event, ensure_ascii=False) + "\n"
+            except (ValueError, RuntimeError, psycopg.Error) as error:
+                terminal = True
+                if turn is None:
+                    yield json.dumps({"type": "error", "message": str(error)}) + "\n"
+                    return
+                if isinstance(error, psycopg.Error):
+                    chat_store.fail_turn(
+                        database,
+                        turn["id"],
+                        "",
+                        "PostgreSQL unavailable during this turn.",
+                    )
+                    message = "PostgreSQL unavailable during this turn."
+                else:
+                    chat_store.fail_turn(database, turn["id"], "", str(error))
+                    message = str(error)
+                yield json.dumps({"type": "error", "message": message}) + "\n"
+            finally:
+                if turn is not None and not terminal:
+                    chat_store.stop_turn(
+                        database,
+                        turn["id"],
+                        "",
+                        "Connection closed during generation.",
+                    )
+
+        return Response(
+            stream(),
+            mimetype="application/x-ndjson",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )
 
     @app.post("/api/investigate")

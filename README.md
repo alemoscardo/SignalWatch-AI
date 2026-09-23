@@ -1,12 +1,12 @@
 # SignalWatch AI
 
-A local demo for investigating synthetic motor telemetry with a small Python agent. The app combines a Flask dashboard, PostgreSQL with pgvector, local document retrieval and an optional OpenRouter model. The original C# SignalWatch repository is separate.
+A local demo for exploring synthetic motor telemetry with a persistent, read-only chat agent. The app combines a Flask dashboard, PostgreSQL with pgvector, local document retrieval and an optional OpenRouter model. The original C# SignalWatch repository is separate.
 
 ![Selected telemetry alert and investigation panel](docs/screenshots/dashboard-alert-selected.png)
 
 ## What the demo does
 
-The dashboard contains a 24-hour synthetic history for motor M-01. Select an amber temperature alert, add context if useful, and ask the agent to investigate it.
+The dashboard contains six synthetic histories for motor M-01. Select an amber temperature alert to add its snapshot to the next message, or chat across datasets without selecting an alert. Conversations and tool traces are saved in PostgreSQL and can be reopened later.
 
 The report separates:
 
@@ -20,11 +20,13 @@ The report separates:
 
 | Area | Current implementation |
 | --- | --- |
-| Telemetry | Five synthetic episodes, six temperature alerts and an explicit data gap |
+| Telemetry | Six datasets with synthetic episodes, deterministic temperature alerts and an explicit data gap |
 | Retrieval | `all-MiniLM-L6-v2` embeddings, exact cosine search with pgvector, 15 curated documents and 26 passages |
-| Agent tools | `read_measurements` and `search_documents`, both read-only and parameterized |
-| Storage | PostgreSQL with evidence snapshots for saved reports |
+| Agent tools | Dataset and alert lists, bounded measurement reads, guidance search and saved-evidence lookup; all read-only |
+| Storage | PostgreSQL with persistent chat threads, full turns, tool traces, context snapshots and archived investigation reports |
 | Model | Any tool-capable OpenRouter model, configured locally or for the current browser session |
+
+The chat shows each model request and tool call as it happens. Assistant replies follow the user's language and cite retrieved snapshots. Long chats are compacted in place using the selected model's context limit when available; the summary remains visible in the same conversation.
 
 The model cannot run SQL, shell commands or equipment controls. Data is synthetic. Keep the repository private and use suitable public data only if you extend it.
 
@@ -60,29 +62,33 @@ docker compose up -d --wait
 .\.venv\Scripts\signalwatch.exe
 ```
 
+`signalwatch-db init` also adds the chat tables to an existing schema v1 database; existing telemetry and archived reports are preserved.
+
 Open [http://127.0.0.1:5055](http://127.0.0.1:5055). Use `--port 5056` to choose another port. The app binds to loopback, and PostgreSQL is exposed only on `127.0.0.1:55432`.
 
 `encoder-setup` downloads the pinned encoder once. `prepare` validates the document catalog, computes embeddings and publishes a corpus generation. Stop the app before running `prepare` or a migration. If the documents change, new investigations stay blocked until preparation succeeds.
 
 ## How to use it
 
-1. Click an amber marker in the temperature chart.
-2. Add optional context, such as a time window to review.
-3. Click **Investigate**.
-4. Follow the citations in the report. They open the matching measurement or document snapshot.
+1. Choose a dataset and optionally select one of its temperature alerts.
+2. Open a saved chat or choose **New chat**.
+3. Ask about the selected alert, compare datasets or request a specific time window. The selected alert applies to later messages in that conversation.
+4. Follow the citations in the response to open the matching evidence snapshot.
 
-The graph also includes speed, pan and zoom controls. Previous investigations reopen without another model call and keep their original evidence. The reference-document panel supports a bounded search over the prepared corpus.
+The graph includes speed, pan and zoom controls. Previous chat transcripts reopen without another model call. Reports created by the older investigation workflow remain in a separate archive. The reference-document panel supports a bounded search over the prepared corpus.
 
 ## Evidence boundary
 
-The Python application owns threshold checks, argument validation, retrieval filters and data-derived numbers. A temperature alert requires a value strictly above 80 °C. A missing minute breaks continuity. There are no configured speed or missing-data alarms.
+The Python application owns threshold checks, tool argument validation, retrieval filters and data-derived numbers. A temperature alert requires a value strictly above 80 °C. A missing minute breaks continuity. There are no configured speed or missing-data alarms.
 
-The agent receives the actual dataset range and can call only these tools:
+The agent can call only these tools:
 
-- `read_measurements(sensor, start, end)`;
-- `search_documents(query)`.
+- `list_datasets()` and `list_alerts(dataset)`;
+- `read_measurements(dataset, sensor, start, end)`;
+- `search_documents(query, dataset, at)`;
+- `open_saved_evidence(reference)` for a snapshot already retrieved in the same chat.
 
-The catalog filters guidance by equipment and alert time. A report must cite every available source category. A successful empty search is reported as `Insufficient evidence`; database or provider errors stop the investigation. Valid citations prove provenance and retrieval, not that a physical diagnosis is correct.
+The model cannot run SQL, shell commands or equipment controls. The catalog filters guidance by equipment and date. Citations can only refer to evidence retrieved in that conversation. A successful empty search is reported as insufficient evidence; provider and database errors are retained on the turn. Valid citations prove provenance and retrieval, not that a physical diagnosis is correct. Chat turns and evidence snapshots stay local in PostgreSQL. OpenRouter keys entered in the browser remain in process memory, and saving session settings does not start a model request.
 
 ## Evaluation
 
@@ -163,7 +169,9 @@ Keep the source documents and encoder files that match the backup. `docker compo
 - `migration.py`: explicit SQLite import and verification.
 - `encoder.py`, `knowledge.py`: local encoding, catalog validation and retrieval.
 - `evidence.py`, `presentation.py`: citations and safe Markdown rendering.
-- `agent.py`: OpenRouter transport, tool loop and reference checks.
+- `agent.py`: OpenRouter transport and the archived investigation workflow.
+- `chat_agent.py`, `chat_store.py`: streaming read-only agent, persistent threads, evidence snapshots and context compaction.
+- `chat_presentation.py`: safe chat Markdown and evidence citation rendering.
 - `history.py`: saved investigation snapshots.
 - `evaluation.py`, `commands.py`: evaluation, review and setup commands.
 - `web.py`, `templates/`, `static/`: browser application.

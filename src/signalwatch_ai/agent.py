@@ -79,7 +79,7 @@ A threshold exceedance alone does not determine severity, a cause or a risk leve
 """
 
 
-def complete(messages, *, api_key=None, model=None):
+def complete(messages, *, api_key=None, model=None, tools=None, max_tokens=None):
     key = os.getenv("OPENROUTER_API_KEY", "") if api_key is None else api_key
     model = (
         os.getenv("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL)
@@ -95,9 +95,11 @@ def complete(messages, *, api_key=None, model=None):
     payload = {
         "model": model,
         "messages": messages,
-        "tools": TOOLS,
+        "tools": TOOLS if tools is None else tools,
         "provider": {"require_parameters": True},
     }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
     req = Request(
         "https://openrouter.ai/api/v1/chat/completions",
         data=json.dumps(payload).encode(),
