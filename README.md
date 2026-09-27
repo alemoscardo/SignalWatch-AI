@@ -1,40 +1,69 @@
 # SignalWatch AI
 
-A local demo for exploring synthetic motor telemetry with a persistent, read-only chat agent. The app combines a Flask dashboard, PostgreSQL with pgvector, local document retrieval and an optional OpenRouter model. The original C# SignalWatch repository is separate.
+A read-only AI agent that investigates industrial telemetry alerts and answers with citations to the exact measurements and documents it used.
 
-![Selected telemetry alert and investigation panel](docs/screenshots/dashboard-alert-selected.png)
+![Selecting a temperature alert, asking the agent why it fired, and reading the cited answer](docs/demo.gif)
 
-## What the demo does
+<sub>Real run with a free OpenRouter model (`nvidia/nemotron-3-ultra-550b-a55b:free`); the waiting time while the agent calls its tools is sped up.</sub>
 
-The dashboard contains six synthetic histories for motor M-01. Select an amber temperature alert to add its snapshot to the next message, or chat across datasets without selecting an alert. Conversations and tool traces are saved in PostgreSQL and can be reopened later.
+## Why
 
-The report separates:
+An LLM answer about sensor data is only useful if an engineer can check it. SignalWatch AI keeps the model away from the database and from the numbers that matter:
 
-- observations from the measurements;
-- hypotheses that still need checking;
-- missing data;
-- suggested next checks;
-- citations to the retrieved measurements and documents.
+- the model can only call a small set of **read-only tools** with validated arguments;
+- thresholds, alerts and every data-derived number come from **Python code**, not from the model;
+- every claim in an answer must **cite evidence retrieved in the same conversation**, and clicking a citation opens the saved snapshot of that evidence.
 
-![Example AI investigation response](docs/screenshots/dashboard-ai-response.png)
+All telemetry and documents are synthetic. The .NET telemetry API that inspired this project lives in [SignalWatch](https://github.com/alemoscardo/SignalWatch).
 
-| Area | Current implementation |
+## What it does
+
+- **Alert-aware chat:** pick an amber temperature alert on the chart and ask about it, or ask questions across all six datasets.
+- **Live tool trace:** the chat streams each model request and tool call, including the arguments and results.
+- **Retrieval over guidance documents:** 15 curated documents (26 passages) embedded locally with `all-MiniLM-L6-v2` and searched with pgvector, filtered by equipment and alert date.
+- **Structured, cited answers:** observations, hypotheses, missing data and suggested checks, with numbered sources.
+- **Persistent conversations:** chats, tool traces and evidence snapshots are stored in PostgreSQL and reopen without another model call; long chats are compacted in place.
+- **Any tool-capable model:** configured through OpenRouter, in `.env` or for the current browser session.
+
+## How it works
+
+```mermaid
+flowchart LR
+    UI["Flask UI<br/>chart + chat"] -->|question + selected alert| Agent["Chat agent<br/>(Python)"]
+    Agent <-->|tool calls| LLM["LLM via OpenRouter"]
+    Agent --> Tools["Read-only tools<br/>validated arguments"]
+    Tools --> TS[("PostgreSQL<br/>telemetry + alerts")]
+    Tools --> KB[("pgvector<br/>document passages")]
+    Tools --> EV["Evidence snapshots"]
+    EV -->|citations| UI
+```
+
+The agent can call only these tools:
+
+| Tool | Purpose |
 | --- | --- |
-| Telemetry | Six datasets with synthetic episodes, deterministic temperature alerts and an explicit data gap |
-| Retrieval | `all-MiniLM-L6-v2` embeddings, exact cosine search with pgvector, 15 curated documents and 26 passages |
-| Agent tools | Dataset and alert lists, bounded measurement reads, guidance search and saved-evidence lookup; all read-only |
-| Storage | PostgreSQL with persistent chat threads, full turns, tool traces, context snapshots and archived investigation reports |
-| Model | Any tool-capable OpenRouter model, configured locally or for the current browser session |
+| `list_datasets()`, `list_alerts(dataset)` | Discover the available telemetry and alerts |
+| `read_measurements(dataset, sensor, start, end)` | Bounded reads of temperature or speed; oversized windows are rejected |
+| `search_documents(query, dataset, at)` | Semantic search over guidance valid for that equipment and date |
+| `open_saved_evidence(reference)` | Re-open a snapshot already retrieved in the same chat |
 
-The chat shows each model request and tool call as it happens. Assistant replies follow the user's language and cite retrieved snapshots. Long chats are compacted in place using the selected model's context limit when available; the summary remains visible in the same conversation.
+The model cannot run SQL, shell commands or equipment controls. A temperature alert requires a value strictly above 80 °C, and a missing minute breaks continuity; there are no speed or missing-data alarms. An empty search is reported as insufficient evidence, and provider or database errors are kept on the turn. Valid citations prove where a statement came from, not that a physical diagnosis is correct.
 
-The model cannot run SQL, shell commands or equipment controls. Data is synthetic. Keep the repository private and use suitable public data only if you extend it.
+## Tech stack
 
-## Quick start on Windows
+| Area | Tools |
+| --- | --- |
+| Backend | Python 3.12, Flask, psycopg 3 |
+| Storage and retrieval | PostgreSQL 17 with pgvector 0.8 (Docker Compose), sentence-transformers |
+| Model access | OpenRouter chat completions with tool calling and streaming |
+| Frontend | Server-rendered HTML, vanilla JavaScript, Plotly.js (bundled) |
+| Quality | `unittest` (74 tests), Playwright browser checks, Black |
 
-You need Python 3.12, Docker Desktop running Linux containers and internet access for the first model download.
+There is no ORM, separate vector server, paid service or frontend build step.
 
-Create the environment and install the pinned dependencies:
+## Quick start (Windows)
+
+You need Python 3.12, Docker Desktop running Linux containers, an [OpenRouter](https://openrouter.ai/) API key and internet access for the first encoder download.
 
 ```powershell
 python -m venv .venv
@@ -43,15 +72,9 @@ python -m venv .venv
 Copy-Item .env.example .env
 ```
 
-Edit `.env` and set:
+In `.env`, set `SIGNALWATCH_DB_PASSWORD`, the same password in `DATABASE_URL`, `OPENROUTER_API_KEY` and a tool-capable `OPENROUTER_MODEL`. The key and model can also be entered in the browser for the current session. Keep `.env` private; credentials stay on the server.
 
-- `SIGNALWATCH_DB_PASSWORD`;
-- the same password in `DATABASE_URL`;
-- `OPENROUTER_API_KEY` and any OpenRouter model that supports the required tool calls. You can also enter a key and model in the browser for the current app session.
-
-Keep `.env` private. Credentials stay on the server. A key entered in the browser temporarily overrides the environment fallback and disappears when the app restarts. Forgetting it returns to the environment fallback, if one is configured.
-
-For a fresh demo, run:
+Start the database, load the demo data and run the app:
 
 ```powershell
 docker compose up -d --wait
@@ -62,52 +85,37 @@ docker compose up -d --wait
 .\.venv\Scripts\signalwatch.exe
 ```
 
-`signalwatch-db init` also adds the chat tables to an existing schema v1 database; existing telemetry and archived reports are preserved.
+Open <http://127.0.0.1:5055> (`--port 5056` chooses another port). The app binds to loopback, and PostgreSQL is exposed only on `127.0.0.1:55432`.
 
-Open [http://127.0.0.1:5055](http://127.0.0.1:5055). Use `--port 5056` to choose another port. The app binds to loopback, and PostgreSQL is exposed only on `127.0.0.1:55432`.
+`encoder-setup` downloads the pinned encoder once. `prepare` validates the document catalog, computes embeddings and publishes a corpus generation; stop the app before running it. If the documents change, new investigations stay blocked until preparation succeeds. `init` also upgrades an existing schema v1 database without touching telemetry or archived reports.
 
-`encoder-setup` downloads the pinned encoder once. `prepare` validates the document catalog, computes embeddings and publishes a corpus generation. Stop the app before running `prepare` or a migration. If the documents change, new investigations stay blocked until preparation succeeds.
+## Using it
 
-## How to use it
-
-1. Choose a dataset and optionally select one of its temperature alerts.
-2. Open a saved chat or choose **New chat**.
+1. Choose a dataset and, optionally, click one of its amber temperature alerts.
+2. Start a new chat or reopen a saved one.
 3. Ask about the selected alert, compare datasets or request a specific time window. The selected alert applies to later messages in that conversation.
-4. Follow the citations in the response to open the matching evidence snapshot.
+4. Open **Tool Calls** to see what the agent checked, and follow the numbered citations to the evidence.
 
-The graph includes speed, pan and zoom controls. Previous chat transcripts reopen without another model call. Reports created by the older investigation workflow remain in a separate archive. The reference-document panel supports a bounded search over the prepared corpus.
-
-## Evidence boundary
-
-The Python application owns threshold checks, tool argument validation, retrieval filters and data-derived numbers. A temperature alert requires a value strictly above 80 °C. A missing minute breaks continuity. There are no configured speed or missing-data alarms.
-
-The agent can call only these tools:
-
-- `list_datasets()` and `list_alerts(dataset)`;
-- `read_measurements(dataset, sensor, start, end)`;
-- `search_documents(query, dataset, at)`;
-- `open_saved_evidence(reference)` for a snapshot already retrieved in the same chat.
-
-The model cannot run SQL, shell commands or equipment controls. The catalog filters guidance by equipment and date. Citations can only refer to evidence retrieved in that conversation. A successful empty search is reported as insufficient evidence; provider and database errors are retained on the turn. Valid citations prove provenance and retrieval, not that a physical diagnosis is correct. Chat turns and evidence snapshots stay local in PostgreSQL. OpenRouter keys entered in the browser remain in process memory, and saving session settings does not start a model request.
+The chart supports speed, pan and zoom. Reports from the earlier one-shot investigation workflow remain in a separate archive, and the reference-document panel supports a bounded search over the prepared corpus.
 
 ## Evaluation
 
-Retrieval evaluation uses the local encoder and PostgreSQL without calling a generation API. The 40 labelled synthetic queries contain 30 development cases and 10 held-out cases.
+Retrieval is evaluated with the local encoder and PostgreSQL, without calling a generation API, on 40 labelled synthetic queries (30 development, 10 held out):
 
 ```powershell
 .\.venv\Scripts\signalwatch-db.exe evaluate retrieval --split development
 .\.venv\Scripts\signalwatch-db.exe evaluate retrieval --split held_out
 ```
 
-For live report evaluation, select one specific tool-capable OpenRouter model in `.env`:
+Live report evaluation runs the agent against one chosen model (`--attempts 3` repeats each case):
 
 ```powershell
 .\.venv\Scripts\signalwatch-db.exe evaluate reports --mode semantic --live
 ```
 
-Use `--attempts 3` for repeated trials when the provider is available. Results, traces and exports are stored under `reports/local/`, which is intentionally ignored by Git. The automated run checks completion, failures, tool traces, retrieved evidence and citation structure. It does not score the semantic quality of the diagnosis. See [`docs/validation.md`](docs/validation.md) for the limits and the optional review format.
+The automated run checks completion, failures, tool traces, retrieved evidence and citation structure. It does not score whether a diagnosis is right. Results are written to `reports/local/` (ignored by Git); see [`docs/validation.md`](docs/validation.md) for the limits and the review format. This is a small synthetic benchmark, not a measure of real-world accuracy.
 
-## Verification
+## Tests
 
 Tests need PostgreSQL, a prepared encoder and a test connection string whose database name ends in `_test`. They create disposable databases and never call a generation API.
 
@@ -123,6 +131,13 @@ Browser checks use Playwright with intercepted model responses. With Edge instal
 $env:SIGNALWATCH_TEST_BROWSER = "msedge"
 .\.venv\Scripts\python.exe tests/browser_smoke.py
 ```
+
+## Limitations
+
+- Telemetry, alerts and documents are synthetic, for one motor (M-01).
+- The knowledge base accepts curated English Markdown, not arbitrary PDFs or OCR.
+- Free OpenRouter models change often and some are slow; answers vary between runs and models.
+- Citations show provenance, not correctness; the diagnosis still needs a qualified person.
 
 ## More detail
 
